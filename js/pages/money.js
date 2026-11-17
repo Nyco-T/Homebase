@@ -4,7 +4,7 @@ import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
 import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat } from "../kinds.js";
-import { editRecord, newRecord } from "../form.js";
+import { editRecord, newRecord, calcField } from "../form.js";
 import { forecast } from "../rules.js";
 import { go } from "../app.js";
 
@@ -54,7 +54,7 @@ function entries(root) {
     current && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
     current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
   root.append(hero);
-  if (current) { const w = waitingBlock(); if (w) root.append(w); }
+  if (current) { const w = waitingBlock(); if (w) root.append(w); const f = favouritesRow(); if (f) root.append(f); }
 
   // where it went: the top 3, the rest on tap
   const cats = {};
@@ -89,7 +89,7 @@ function entries(root) {
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     })));
   }
-  root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: entrySheet }));
+  root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: () => entrySheet() }));
 }
 
 // Income and expenses start fresh each month; this button shows them over all time (corrections left out).
@@ -114,7 +114,7 @@ function totalsBlock() {
 async function askBalance() {
   const now = balanceOn(F.today());
   const answer = await ask("Set balance", "What's in your account right now?", now.toFixed(2).replace(".", ","), "text");
-  const v = F.parseNumber(answer);
+  const v = F.parseAmount(answer);
   if (v == null) return;
   const diff = setBalance(v);
   toast(diff === 0 ? "Balance already " + F.money(v) : "Balance set to " + F.money(v) + " (correction " + F.signedMoney(diff) + ")");
@@ -132,25 +132,74 @@ async function splitDialog(entry) {
   const amount = h("input.field", { inputmode: "decimal", value: (total / 2).toFixed(2).replace(".", ",") });
   const people = [...new Set(db.all("tasks").filter(t => t.refundFrom).map(t => t.refundFrom))];
   const body = h("div", h("div.muted.small", (entry.description || "") + " · you paid " + F.money(total)),
-    h("div.grid2", h("label", h("span.label.caps", "Who owes you"), who), h("label", h("span.label.caps", "How much"), amount)),
+    h("label", h("span.label.caps", "Who owes you"), who), h("label", h("span.label.caps", "How much"), calcField(amount)),
     h("datalist", { id: "split-people" }, people.map(p => h("option", { value: p }))),
     h("div.small.faint", { style: { marginTop: "8px" } }, "You get a task \"Get … back\". Tick it when the money is there - it's booked into Money by itself."));
   const ok = await dialog("Split " + (entry.description || "entry"), body, [{ label: "Cancel", value: false }, { label: "Split", value: true, main: true }]);
   if (!ok) return;
-  const v = F.parseNumber(amount.value);
+  const v = F.parseAmount(amount.value);
   if (!who.value.trim() || v == null || v <= 0) { toast("Name and amount, please"); return; }
   splitEntry(entry, who.value.trim(), v);
   toast("Task: get " + F.money(v) + " back from " + who.value.trim());
 }
 
-// New entry in a sheet: Expense / Income, amount, what, category (guessed), date.
-function entrySheet() {
-  let isIncome = income;
+// The entries you book most (last 90 days, at least twice) - one tap books them again. Same amount each time
+// (Mensa 4,50) -> booked right away; changing amounts (REWE) -> the entry sheet opens with it filled in.
+// Automation: learned from your entries by itself, nothing to set up.
+export function favourites(max = 6) {
+  const today = F.todayIso();
+  const since = F.iso(F.addDays(F.today(), -90));
+  const groups = new Map();
+  for (const x of db.all("transactions")) {
+    if (!x.date || x.date < since || x.date > today || x.repeat || isCorrection(x) || /paid back/i.test(x.category || "")) continue;
+    const key = (x.description || "").trim().toLowerCase();
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(x);
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
+    const last = list.slice(0, 3).map(x => num(x, "amount"));
+    out.push({ description: list[0].description.trim(), category: list[0].category || "", amount: last[0], fixed: last.every(a => Math.abs(a - last[0]) < 0.005),
+      count: list.length, lastDate: list[0].date });
+  }
+  return out.sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate)).slice(0, max);
+}
+
+const favLabel = f => f.description + " " + (f.fixed ? F.money(Math.abs(f.amount)) : "…");
+
+function bookFavourite(f) {
+  if (!f.fixed) return entrySheet(f);
+  const e = db.add("transactions", { description: f.description, amount: f.amount, category: f.category || guessCategory(f.description), date: F.todayIso() });
+  toast((f.amount > 0 ? "Income " : "Expense ") + F.money(Math.abs(f.amount)) + " · " + f.description, "Undo", () => db.remove("transactions", e));
+}
+
+// "Quick add" row on the Money page.
+function favouritesRow() {
+  const favs = favourites();
+  if (!favs.length) return null;
+  return h("div", section("Quick add", "one tap books it today"),
+    h("div.chips", { style: { flexWrap: "wrap" } }, favs.map(f => h("button.chip", { onclick: () => bookFavourite(f) },
+      h("span" + (f.amount > 0 ? ".greenc" : ""), favLabel(f))))));
+}
+
+// New entry in a sheet: Expense / Income, amount, what, category (guessed), date. preset = a favourite to fill in.
+function entrySheet(preset) {
+  let isIncome = preset && preset.amount != null ? preset.amount > 0 : income;
   const amount = h("input.field", { inputmode: "decimal", placeholder: "0,00", style: { fontSize: "28px", textAlign: "center", padding: "12px" } });
   const what = h("input.field", { placeholder: "What for?" });
   const cat = h("input.field", { list: "money-cats", placeholder: "Category" });
   const day = h("input.field", { type: "date", value: F.todayIso() });
   let picked = false;
+  const fill = f => {
+    what.value = f.description; cat.value = f.category || ""; picked = !!cat.value;
+    isIncome = f.amount > 0; drawToggle();
+    amount.value = f.fixed ? F.plainAmount(Math.abs(f.amount)) : "";
+    amount.dispatchEvent(new Event("input"));
+    setTimeout(() => amount.focus(), 50);
+  };
   cat.addEventListener("input", () => { picked = !!cat.value; });
   what.addEventListener("input", () => { if (!picked) cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; });
   const toggle = h("div.seg");
@@ -160,8 +209,11 @@ function entrySheet() {
       h("button" + (isIncome ? ".on" : ""), { onclick: () => { isIncome = true; drawToggle(); } }, "Income"));
   };
   drawToggle();
+  const favs = favourites(8);
+  const favBox = favs.length && !preset ? h("div.chips", { style: { flexWrap: "wrap", marginTop: "8px" } },
+    favs.map(f => h("button.chip", { type: "button", onclick: () => fill(f) }, favLabel(f)))) : null;
   const add = () => {
-    const v = F.parseNumber(amount.value);
+    const v = F.parseAmount(amount.value);
     if (v == null || v <= 0) { amount.focus(); toast("Type the amount first"); return; }
     const desc = what.value.trim() || (isIncome ? "Income" : "Expense");
     const c = cat.value.trim() || guessCategory(desc).replace(/^Other$/, isIncome ? "Income" : "Other");
@@ -171,13 +223,13 @@ function entrySheet() {
     toast((isIncome ? "Income " : "Expense ") + F.money(v) + " · " + desc, "Undo", () => db.remove("transactions", e));
   };
   for (const el of [amount, what, cat]) el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-  const s = sheet("New entry", h("div", toggle, amount,
+  const s = sheet("New entry", h("div", toggle, favBox, calcField(amount),
     h("label", h("span.label.caps", "What for"), what),
     h("div.grid2", h("label", h("span.label.caps", "Category"), cat), h("label", h("span.label.caps", "Date"), day)),
     h("datalist", { id: "money-cats" }, names("transactions", "category").map(c => h("option", { value: c })))), {
     actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Add", { kind: "primary", icon: "plus", onclick: add })]
   });
-  setTimeout(() => amount.focus(), 250);
+  if (preset) setTimeout(() => fill(preset), 0); else setTimeout(() => amount.focus(), 250);
 }
 
 function repeats(root) {
@@ -221,7 +273,7 @@ export async function askRepeat(w) {
   const r = await dialog(waitQuestion(w), body, [{ label: "Not yet", value: "no" }, { label: "Yes, book it", value: "yes", main: true }]);
   if (r === "no") { notYetRepeat(w); toast("OK - Homebase asks again tomorrow"); }
   if (r === "yes") {
-    const a = F.parseNumber(input.value);
+    const a = F.parseAmount(input.value);
     answered(w, confirmRepeat(w, a == null ? undefined : a));
   }
 }

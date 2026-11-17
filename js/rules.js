@@ -247,6 +247,7 @@ function bookkeepingNow() {
     if (!log) { log = { id: db.newId(), created: db.stamp(), item, name: s.item.trim(), dates: [] }; db.all("buylog").push(log); }
     log.dates.push(F.todayIso());
     if (s.store) log.store = s.store;
+    if (num(s, "price") > 0) { log.price = num(s, "price"); log.priceDate = F.todayIso(); }   // for what recipes cost
     log.updated = db.stamp();
     db.all("automarks").push({ id: db.newId(), key: "buy:" + s.id, date: F.todayIso() });
     bought = true;

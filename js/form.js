@@ -6,7 +6,7 @@ import * as F from "./fmt.js";
 import { KINDS, titleOf, names } from "./kinds.js";
 import { h, sheet, btn, switchEl, tickBox, toast, icon } from "./ui.js";
 
-// editRecord("tasks", rec, { isNew, actions: [{label, icon, run}] })
+// editRecord("tasks", rec, { isNew, actions: [{label, icon, run}], top: element shown under the title })
 export function editRecord(kind, rec, opts = {}) {
   const K = KINDS[kind];
   let saveTimer = null;
@@ -43,7 +43,7 @@ export function editRecord(kind, rec, opts = {}) {
   actions.push(btn("Done", { kind: "primary", onclick: () => s.close() }));
 
   const flush = () => { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; db.save(kind); } };
-  const s = sheet(null, h("div", h("div.caps", { style: { margin: "2px 0 6px" } }, K.one), titleInput, body), {
+  const s = sheet(null, h("div", h("div.caps", { style: { margin: "2px 0 6px" } }, K.one), titleInput, opts.top || null, body), {
     actions,
     onClose: () => {
       flush();
@@ -59,6 +59,30 @@ function labeled(text, el) {
   return h("label", h("span.label.caps", text), el);
 }
 
+// An amount field with a small calculator: + − × ÷ buttons (the iPhone number pad has none), "= 15,70 €" while you
+// type a sum, and the sum turns into its result when you leave the field.
+export function calcField(input, onResult) {
+  const result = h("div.small.muted", { style: { minHeight: "18px", marginTop: "4px" } });
+  const update = () => {
+    const sum = F.isSum(input.value);
+    const v = F.parseAmount(input.value);
+    result.textContent = sum ? (v == null ? "not a sum I can work out" : "= " + F.money(v)) : "";
+  };
+  const opBtn = (label, op) => h("button.chip", { type: "button", onpointerdown: e => e.preventDefault(),
+    onclick: () => { input.value = input.value.trim() + op; input.dispatchEvent(new Event("input")); input.focus(); } }, label);
+  input.addEventListener("input", update);
+  input.addEventListener("blur", () => {
+    if (!F.isSum(input.value)) return;
+    const v = F.parseAmount(input.value);
+    if (v == null) return;
+    input.value = F.plainAmount(v);
+    input.dispatchEvent(new Event("input"));
+    onResult && onResult(v);
+  });
+  return h("div", input, h("div", { style: { display: "flex", gap: "6px", alignItems: "center", marginTop: "6px" } },
+    opBtn("+", "+"), opBtn("−", "-"), opBtn("×", "*"), opBtn("÷", "/"), h("div.grow", { style: { flex: "1" } }), result));
+}
+
 function fieldEditor(kind, rec, f, set, changed) {
   switch (f.type) {
     case "long": {
@@ -71,11 +95,11 @@ function fieldEditor(kind, rec, f, set, changed) {
       const v = rec[f.key];
       const i = h("input.field", { inputmode: "decimal", placeholder: f.hint || "", value: v == null ? "" : (f.type === "money" ? Number(v).toFixed(2).replace(".", ",") : String(v).replace(".", ",")) });
       i.addEventListener("input", () => {
-        const n = F.parseNumber(i.value);
-        i.style.color = i.value && n == null ? "var(--red)" : "";
+        const n = f.type === "money" ? F.parseAmount(i.value) : F.parseNumber(i.value);
+        i.style.color = i.value && n == null && !F.isSum(i.value) && !/[-+*/×x÷:]\s*$/.test(i.value) ? "var(--red)" : "";
         if (!i.value.trim()) set(f.key, null); else if (n != null) set(f.key, n);
       });
-      return labeled(f.label + (f.type === "money" ? " (" + F.currency() + ")" : ""), i);
+      return labeled(f.label + (f.type === "money" ? " (" + F.currency() + ")" : ""), f.type === "money" ? calcField(i) : i);
     }
     case "date": {
       const i = h("input.field", { type: "date", value: rec[f.key] || "" });

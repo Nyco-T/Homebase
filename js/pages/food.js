@@ -5,10 +5,10 @@ import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, seg, toast, empty, section, sheet, dialog } from "../ui.js";
 import { d, book, names } from "../kinds.js";
 import { quickAdd } from "../quick.js";
-import { editRecord, newRecord } from "../form.js";
+import { editRecord, newRecord, calcField } from "../form.js";
 import { isStaple } from "../rules.js";
 import { go } from "../app.js";
-import { match, recentlyBought } from "../cook.js";
+import { match, recentlyBought, recipeCost, costLabel, coreName, priceOf, setPrice, pricedIngredients } from "../cook.js";
 import { parseRecipe } from "../recipeparse.js";
 
 const TABS = ["shopping", "meals", "recipes"];
@@ -85,11 +85,11 @@ async function bookPurchase() {
   const total = h("input.field", { inputmode: "decimal", placeholder: "0,00" });
   const shops = [...new Set(["Supermarkt", ...names("shopping", "store")])];
   const shop = h("input.field", { list: "shops-dl", value: shops[0] });
-  const body = h("div", h("div.grid2", h("label", h("span.label.caps", "Total (" + F.currency() + ")"), total), h("label", h("span.label.caps", "Shop"), shop)),
+  const body = h("div", h("label", h("span.label.caps", "Total (" + F.currency() + ")"), calcField(total)), h("label", h("span.label.caps", "Shop"), shop),
     h("datalist", { id: "shops-dl" }, shops.map(s => h("option", { value: s }))));
   const ok = await dialog("Book purchase", body, [{ label: "Cancel", value: false }, { label: "Book it", value: true, main: true }]);
   if (!ok) return;
-  const v = F.parseNumber(total.value);
+  const v = F.parseAmount(total.value);
   if (v == null || v <= 0) { toast("Nothing booked - the total wasn't a number"); return; }
   book(shop.value.trim() || "Shopping", -v, "Groceries", F.todayIso());
   toast("Booked " + F.money(v) + " into Money");
@@ -177,7 +177,9 @@ function mealSheet(m) {
 
 let cookText = null;
 
-// "What can I cook?": what you have -> your recipes, best match first.
+// "What can I cook?": what you have -> your recipes, best match first (or: the ones you can cook now, cheapest first).
+let cheapFirst = false;
+const costOf = m => { const c = m.cost; return !c || !c.priced ? Infinity : (c.perServing ?? c.total); };
 function cookCard() {
   if (cookText === null) cookText = recentlyBought().join(", ");
   const input = h("textarea.field", { rows: 2, placeholder: "What's at home? Nudeln, Tomaten, Käse …" });
@@ -185,14 +187,16 @@ function cookCard() {
   const results = h("div");
   const draw = () => {
     results.innerHTML = "";
-    const found = match(input.value).slice(0, 6);
+    let found = match(input.value);
+    if (cheapFirst) found = found.map(m => ({ ...m, cost: recipeCost(m.recipe) })).sort((a, b) => (a.missing.length > 0) - (b.missing.length > 0) || costOf(a) - costOf(b));
+    found = found.slice(0, 6);
     if (!input.value.trim()) { results.append(h("div.small.muted", { style: { marginTop: "8px" } }, "Type what you have - oil, salt and the like count by themselves.")); return; }
     if (!found.length) { results.append(h("div.small.muted", { style: { marginTop: "8px" } }, "None of your recipes fits yet.")); return; }
     for (const m of found) {
       const r = m.recipe;
       results.append(h("div.row",
         tile("pot", m.missing.length ? "--home" : "--money"),
-        h("div.grow", h("div.title", r.name), h("div.meta", { style: { whiteSpace: "normal" } }, m.missing.length ? m.have + " of " + m.total + " · missing: " + m.missing.join(", ") : "you have everything" + (r.minutes ? " · " + r.minutes + " min" : ""))),
+        h("div.grow", h("div.title", r.name), h("div.meta", { style: { whiteSpace: "normal" } }, (m.missing.length ? m.have + " of " + m.total + " · missing: " + m.missing.join(", ") : "you have everything" + (r.minutes ? " · " + r.minutes + " min" : "")) + (costLabel(recipeCost(r), true) ? " · " + costLabel(recipeCost(r), true) : ""))),
         h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
           btn("Plan", { kind: "soft", small: true, onclick: () => { db.add("meals", { title: r.name, date: F.todayIso(), slot: new Date().getHours() < 11 ? "Lunch" : "Dinner", recipe: r.id }); toast(r.name + " planned for today"); } }),
           m.missing.length ? btn("+ List", { kind: "ghost", small: true, onclick: () => { for (const x of m.missing) db.add("shopping", { item: x, done: false, notes: r.name }); toast(F.plural(m.missing.length, "item", "items") + " on the shopping list"); } }) : null)));
@@ -200,8 +204,10 @@ function cookCard() {
   };
   input.addEventListener("input", () => { cookText = input.value; draw(); });
   draw();
+  const cheap = h("button.chip" + (cheapFirst ? ".on" : ""), { type: "button", onclick: () => { cheapFirst = !cheapFirst; cheap.classList.toggle("on", cheapFirst); draw(); } }, "Cheapest first");
   return h("div.card", h("div.cardhead", h("h2", tile("pot", "--home"), "What can I cook?"),
-    btn("Reset", { kind: "ghost", small: true, onclick: () => { cookText = recentlyBought().join(", "); input.value = cookText; draw(); } })), input, results);
+    btn("Reset", { kind: "ghost", small: true, onclick: () => { cookText = recentlyBought().join(", "); input.value = cookText; draw(); } })), input,
+    h("div", { style: { marginTop: "8px" } }, cheap), results);
 }
 
 function recipes(root) {
@@ -219,7 +225,7 @@ function recipes(root) {
     if (!all.length) { listBox.append(empty(db.all("recipes").length ? "No recipe matches." : "Save the recipes you cook - one tap puts the ingredients on the shopping list.")); return; }
     listBox.append(h("div.list", all.map(r => h("div.row", { onclick: () => openRecipe(r) },
       tile("pot", "--home"),
-      h("div.grow", h("div.title", (r.favorite ? "★ " : "") + (r.name || "–")), h("div.meta", [r.category, r.minutes ? r.minutes + " min" : "", (r.ingredients || []).length ? (r.ingredients.length + " ingredients") : ""].filter(Boolean).join(" · ")))))));
+      h("div.grow", h("div.title", (r.favorite ? "★ " : "") + (r.name || "–")), h("div.meta", [r.category, r.minutes ? r.minutes + " min" : "", (r.ingredients || []).length ? (r.ingredients.length + " ingredients") : "", costLabel(recipeCost(r), true)].filter(Boolean).join(" · ")))))));
   };
   drawList();
   root.append(fab(() => newRecord("recipes")));
@@ -250,8 +256,49 @@ function pasteRecipe() {
   setTimeout(() => text.focus(), 250);
 }
 
+// What the recipe costs, with a button to fill in the prices Homebase doesn't know yet.
+function costRow(r) {
+  const row = h("div.row", { style: { margin: "6px 0 2px" } });
+  const draw = () => {
+    const c = recipeCost(r);
+    row.innerHTML = "";
+    row.append(tile("wallet", "--money"),
+      h("div.grow", h("div.title", c.priced ? costLabel(c) : c.of ? "What does it cost?" : "No ingredients yet"),
+        h("div.meta", { style: { whiteSpace: "normal" } }, c.priced ? (c.perServing == null ? "set Servings for a price per serving · " : "") + "package prices, rough" : c.of ? "Add the prices once - bought items with a price are learned by themselves." : "")),
+      c.of ? btn("Prices", { kind: "soft", small: true, onclick: () => pricesSheet(r, draw) }) : null);
+  };
+  draw();
+  return row;
+}
+
+function pricesSheet(r, done) {
+  const ings = pricedIngredients(r);
+  const fields = ings.map(text => {
+    const name = coreName(text);
+    const known = priceOf(text);
+    const input = h("input.field", { inputmode: "decimal", placeholder: "€", value: known ? F.plainAmount(known.price) : "", style: { width: "96px", textAlign: "right" } });
+    return { text, name, known, input };
+  });
+  const s = sheet("Prices · " + (r.name || "Recipe"), h("div",
+    h("div.small.muted", { style: { marginBottom: "8px" } }, "What a pack costs in your shop. Known prices are filled in - Homebase also learns them from bought items with a price."),
+    h("div.list", fields.map(f => h("div.row", h("div.grow", h("div.title", f.name), h("div.meta", f.known && f.known.name !== f.name.toLowerCase() ? "price of “" + f.known.name + "”" : f.text)), f.input)))), {
+    actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Save", { kind: "primary", onclick: () => {
+      let n = 0;
+      for (const f of fields) {
+        const v = F.parseAmount(f.input.value);
+        if (v == null || v <= 0) continue;
+        if (f.known && Math.abs(f.known.price - v) < 0.005) continue;
+        setPrice(f.known && f.known.name !== f.name.toLowerCase() ? f.known.name : f.name, v);
+        n++;
+      }
+      s.close();
+      done && done();
+      if (n) toast(F.plural(n, "price", "prices") + " saved");
+    } })] });
+}
+
 function openRecipe(r) {
-  editRecord("recipes", r, { actions: [
+  editRecord("recipes", r, { top: costRow(r), actions: [
     { label: "Ingredients → list", icon: "cart", run: rec => {
       let n = 0;
       for (const i of rec.ingredients || []) {

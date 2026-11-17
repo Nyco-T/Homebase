@@ -30,6 +30,34 @@ export function parseNumber(text) {
   return Number.isFinite(v) ? v : null;
 }
 
+// An amount that may be a small sum: "12,50+3,20" -> 15.7, "3x2,80" -> 8.4, "20/3" -> 6.67. Plain numbers as parseNumber.
+export const isSum = text => /\d\s*[-+*/×x÷:]\s*[\d,.]/i.test(String(text || "").replace("−", "-"));
+export function parseAmount(text) {
+  if (text == null) return null;
+  const s = String(text).replace(/€|\s/g, "").replace(/−/g, "-").replace(/[×x]/gi, "*").replace(/[÷:]/g, "/");
+  if (!isSum(s)) return parseNumber(s);
+  const parts = s.split(/([-+*/])/).filter(p => p !== "");
+  // a leading minus belongs to the first number
+  if (parts[0] === "-") { parts.shift(); parts[0] = "-" + parts[0]; }
+  const nums = [], ops = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) { const n = parseNumber(parts[i]); if (n == null) return null; nums.push(n); }
+    else if ("+-*/".includes(parts[i])) ops.push(parts[i]); else return null;
+  }
+  if (nums.length !== ops.length + 1) return null;
+  // × and ÷ first, then + and −
+  const n2 = [nums[0]], o2 = [];
+  ops.forEach((op, i) => {
+    if (op === "*") n2[n2.length - 1] *= nums[i + 1];
+    else if (op === "/") n2[n2.length - 1] = nums[i + 1] === 0 ? NaN : n2[n2.length - 1] / nums[i + 1];
+    else { o2.push(op); n2.push(nums[i + 1]); }
+  });
+  let v = n2[0];
+  o2.forEach((op, i) => { v = op === "+" ? v + n2[i + 1] : v - n2[i + 1]; });
+  return Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+}
+export const plainAmount = v => (Math.round(v * 100) / 100).toFixed(2).replace(".", ",");
+
 // --- dates ---
 
 const pad = n => String(n).padStart(2, "0");
