@@ -2,7 +2,7 @@
 // A new version (new VERSION here) is downloaded in the background on an online start; the app then shows
 // "New version ready - Reload". Your data is in IndexedDB and is never touched by this file.
 
-const VERSION = "1.0.4";
+const VERSION = "1.0.5";
 const CACHE = "homebase-" + VERSION;
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
@@ -13,7 +13,8 @@ const FILES = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
+  // always fresh from the server (never the browser's own cache), so a new version is complete
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(f => new Request(f, { cache: "reload" })))));
 });
 
 // The page asks the new version to take over when you tap "Reload".

@@ -120,9 +120,9 @@ function moneyCard() {
   const spent = -month.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   const c = card("Money this month", "wallet", "--money", "money");
   c.append(h("div.stats", { style: { marginBottom: "6px" } },
+    h("div", h("div.caps", "Balance"), h("div.v.serif" + (income - spent < 0 ? ".red" : ""), F.signedMoney(income - spent))),
     h("div", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(income))),
-    h("div", h("div.caps", "Spent"), h("div.v.serif", F.money(spent))),
-    h("div", h("div.caps", "Balance"), h("div.v.serif" + (income - spent < 0 ? ".red" : ""), F.signedMoney(income - spent)))));
+    h("div", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(spent)))));
   if (db.all("transactions").length) {
     const f = forecast();
     c.append(h("div.small" + (f.end < 0 ? ".red" : ".muted"), "Month end ≈ " + F.signedMoney(f.end)));

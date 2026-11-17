@@ -34,9 +34,9 @@ function entries(root) {
   const inc = inMonth.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -inMonth.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   root.append(h("div.stats",
+    h("div.stat", h("div.caps", "Balance"), h("div.v.serif" + (inc - out < 0 ? ".red" : ""), F.signedMoney(inc - out))),
     h("div.stat", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(inc))),
-    h("div.stat", h("div.caps", "Expenses"), h("div.v.serif", F.money(out))),
-    h("div.stat", h("div.caps", "Balance"), h("div.v.serif" + (inc - out < 0 ? ".red" : ""), F.signedMoney(inc - out)))));
+    h("div.stat", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(out)))));
   if (current && db.all("transactions").length) {
     const f = forecast();
     root.append(h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { margin: "-4px 2px 12px" } },
