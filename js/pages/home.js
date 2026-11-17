@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, sheet, toast, empty, confetti } from "../ui.js";
-import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isCorrection, balanceOn } from "../kinds.js";
+import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isNeutral, balanceOn, accountIcon } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -133,7 +133,7 @@ function comingUpCard() {
 function moneyCard() {
   const t = F.today();
   const month = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === t.getFullYear() && dd.getMonth() === t.getMonth() && dd <= t; });
-  const real = month.filter(x => !isCorrection(x));
+  const real = month.filter(x => !isNeutral(x));   // corrections and cash withdrawals aren't income or spending
   const income = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const spent = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   const bal = balanceOn(t);   // the total you have, carried over
@@ -144,6 +144,11 @@ function moneyCard() {
     h("div", h("div.caps", "Balance"), h("div.v.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal))),
     h("div", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(income))),
     h("div", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(spent)))));
+  // Bank and Cash on their own, once you use Cash
+  if (db.all("transactions").some(x => x.account && x.account !== "Bank")) {
+    const accs = [...new Set(["Bank", ...db.all("transactions").map(x => x.account).filter(Boolean)])];
+    c.append(h("div.small.muted", { style: { marginBottom: "4px" } }, accs.map(a => accountIcon(a) + " " + a + " " + F.money(balanceOn(t, a))).join("   ")));
+  }
   if (db.all("transactions").length) {
     const f = forecast();
     c.append(h("div.small" + (f.end < 0 ? ".red" : ".muted"), "Month end ≈ " + F.signedMoney(f.end)));

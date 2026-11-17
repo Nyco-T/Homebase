@@ -116,7 +116,7 @@ function calendar(root) {
 
   const start = F.mondayOf(new Date(y, m, 1));
   const end = F.addDays(start, 41);
-  const items = reminders.between(start, end).filter(x => !["backup", "phonecal", "confirm"].includes(x.kind));
+  const items = reminders.between(start, end).filter(x => !["backup", "phonecal", "confirm", "countcash"].includes(x.kind));
   const byDay = {};
   for (const x of items) (byDay[F.iso(x.date)] = byDay[F.iso(x.date)] || []).push(x);
   // repeating events: every repeat in this month view, not only the next one

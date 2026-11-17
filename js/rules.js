@@ -4,7 +4,7 @@
 import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { rule, reminder, find, NEVER, marks, setBookkeeping } from "./auto.js";
-import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion } from "./kinds.js";
+import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion, isNeutral, balanceOn } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
 const step = text => ({ text, done: false });
@@ -36,11 +36,11 @@ export function register() {
       const t = F.today();
       const last = new Date(t.getFullYear(), t.getMonth() - 1, 1);
       const before = new Date(t.getFullYear(), t.getMonth() - 2, 1);
-      const month = db.all("transactions").filter(x => inMonth(x, last.getFullYear(), last.getMonth()) && !/correction|korrektur/i.test(x.category || ""));
+      const month = db.all("transactions").filter(x => inMonth(x, last.getFullYear(), last.getMonth()) && !isNeutral(x));
       if (!month.length) return [];
       const sum = (list, pos) => list.map(x => num(x, "amount")).filter(v => pos ? v > 0 : v < 0).reduce((a, b) => a + b, 0);
       const income = sum(month, true), spent = -sum(month, false);
-      const prev = db.all("transactions").filter(x => inMonth(x, before.getFullYear(), before.getMonth()) && !/correction|korrektur/i.test(x.category || ""));
+      const prev = db.all("transactions").filter(x => inMonth(x, before.getFullYear(), before.getMonth()) && !isNeutral(x));
       const prevSpent = -sum(prev, false);
       const cats = {};
       for (const x of month) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
@@ -60,6 +60,15 @@ export function register() {
       const f = forecast();
       if (f.end >= 0) return [];
       return [{ date: F.today(), title: "This month may end at " + F.signedMoney(f.end), detail: "still to come " + F.signedMoney(f.coming) + ", everyday ≈ " + F.signedMoney(f.rest), kind: "transactions", id: null, lead: 0, icon: "trend", color: "--red" }];
+    });
+
+  reminder("money.count-cash", "money", "Count your cash",
+    "Once you use the Cash account: every 2 weeks a reminder to count your wallet, so the cash balance stays right (one tap to set it).", () => {
+      const cash = db.all("transactions").filter(x => x.account === "Cash");
+      if (!cash.length) return [];
+      const since = F.parseIso(db.setting("cashChecked", "")) || F.parseIso(cash.map(x => x.date).sort()[0]);
+      if (!since || F.daysBetween(since, F.today()) < 14) return [];
+      return [{ date: F.today(), title: "Count your cash", detail: "Homebase thinks " + F.money(balanceOn(F.today(), "Cash")) + " · tap to set it", kind: "countcash", id: null, lead: 0, icon: "wallet", color: "--money" }];
     });
 
   reminder("money.confirm-repeats", "money", "Ask before booking repeating entries",
@@ -139,7 +148,7 @@ export function register() {
       const inWeek = x => x && x >= monday && x <= sunday;
       if (!db.all("tasks").length && !db.all("transactions").length) return [];
       const done = db.all("tasks").filter(t => isOn(t, "done") && inWeek(d(t, "doneDate")));
-      const spent = -db.all("transactions").filter(t => inWeek(d(t, "date")) && num(t, "amount") < 0).reduce((a, t) => a + num(t, "amount"), 0);
+      const spent = -db.all("transactions").filter(t => inWeek(d(t, "date")) && num(t, "amount") < 0 && !isNeutral(t)).reduce((a, t) => a + num(t, "amount"), 0);
       const week = weekNumber(monday);
       let b = "Tasks done: " + done.length + "\n" + done.slice(0, 10).map(t => "- " + t.title).join("\n") + "\n\nSpent: " + F.money(spent) + "\n";
       const next = allDatesBetween(F.addDays(sunday, 1), F.addDays(sunday, 7));

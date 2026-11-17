@@ -89,7 +89,7 @@ export function usedMost(kind, key, extra = [], max = 12) {
   const count = new Map();
   for (const r of db.all(kind)) {
     const v = (r[key] || "").trim();
-    if (v && !/correction|korrektur/i.test(v)) count.set(v, (count.get(v) || 0) + 1);
+    if (v && !/correction|korrektur|^transfer$/i.test(v)) count.set(v, (count.get(v) || 0) + 1);
   }
   const out = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
   for (const c of extra) if (!out.some(o => o.toLowerCase() === c.toLowerCase())) out.push(c);

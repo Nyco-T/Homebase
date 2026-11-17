@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat } from "../kinds.js";
+import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, isNeutral, isTransfer, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat, accounts, accountOf, accountIcon, moveMoney, transferPair, guessAccount } from "../kinds.js";
 import { editRecord, newRecord, calcField, choiceChips, usedMost } from "../form.js";
 import { forecast } from "../rules.js";
 import { catStyle } from "../cats.js";
@@ -12,6 +12,7 @@ import { go } from "../app.js";
 let month = null;
 let income = false;
 let catFilter = null;
+let acct = null;   // null = all accounts
 
 export function render(root, sub) {
   const t = F.today();
@@ -29,15 +30,23 @@ function entries(root) {
   const y = month.getFullYear(), m = month.getMonth();
   const current = y === t.getFullYear() && m === t.getMonth();
   // an entry booked for a later day (the salary on the 28th) only shows from that day on
-  const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m && dd <= t; });
-  // a balance correction only fixes the balance - it's not income or spending
-  const real = inMonth.filter(x => !isCorrection(x));
+  const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m && dd <= t && (!acct || accountOf(x) === acct); });
+  // a balance correction or a cash withdrawal only moves money around - it's not income or spending
+  const real = inMonth.filter(x => !isNeutral(x));
   const inc = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   // the total you have, carried over from earlier months (up to today, or the end of an earlier month)
   const monthEnd = new Date(y, m + 1, 0);
   const upTo = monthEnd < t ? monthEnd : t;
-  const bal = balanceOn(upTo);
+  const bal = balanceOn(upTo, acct);
+
+  // the accounts: All · Bank · Cash (+ to add one) - each with what's in it
+  const accs = accounts();
+  root.append(h("div.chips",
+    h("button.chip" + (!acct ? ".on" : ""), { onclick: () => { acct = null; catFilter = null; go("money"); } }, "All " + F.moneyShort(balanceOn(t))),
+    accs.map(a => h("button.chip" + (acct === a ? ".on" : ""), { onclick: () => { acct = acct === a ? null : a; catFilter = null; go("money"); } },
+      accountIcon(a) + " " + a + " " + F.moneyShort(balanceOn(t, a)))),
+    h("button.chip", { onclick: addAccount, "aria-label": "Add an account" }, "+")));
 
   // the month and its balance - big, one glance
   const hero = h("div.card", { style: { padding: "12px 16px 14px" } },
@@ -45,14 +54,16 @@ function entries(root) {
       h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { month = new Date(y, m - 1, 1); catFilter = null; go("money"); } }),
       h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m)),
       h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } })),
-    h("div.caps", { style: { textAlign: "center" } }, current ? "Balance · you have" : "Balance on " + F.date(upTo)),
-    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 0" }, onclick: askBalance }, F.signedMoney(bal)),
-    h("div.small.faint", { style: { textAlign: "center", marginBottom: "10px" }, onclick: askBalance }, "tap to set"),
+    h("div.caps", { style: { textAlign: "center" } }, (acct ? accountIcon(acct) + " " + acct : "Balance") + (current ? " · you have" : " on " + F.date(upTo))),
+    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 0" }, onclick: () => askBalance(acct || "Bank") }, F.signedMoney(bal)),
+    h("div.small.faint", { style: { textAlign: "center", marginBottom: "10px" }, onclick: () => askBalance(acct || "Bank") }, acct ? "tap to set" : "tap to set your Bank balance"),
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
       h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
       h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
     totalsBlock(),
-    current && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
+    current ? h("div", { style: { textAlign: "center", marginTop: "6px" } }, btn(acct === "Cash" ? "Count cash" : "Move money", { kind: "ghost", small: true, icon: acct === "Cash" ? "wallet" : "repeat",
+      onclick: () => acct === "Cash" ? askBalance("Cash") : moveDialog() })) : null,
+    current && !acct && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
     current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
   root.append(hero);
   if (current) { const w = waitingBlock(); if (w) root.append(w); const f = favouritesRow(); if (f) root.append(f); }
@@ -78,18 +89,26 @@ function entries(root) {
 
   // every entry, by day
   // corrections only fix the balance - they aren't listed
-  const shown = inMonth.filter(x => !isCorrection(x) && (!catFilter || (x.category || "Other") === catFilter)).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
+  // a transfer is two entries; in "All" only its "from" side is listed
+  const shown = inMonth.filter(x => !isCorrection(x) && !(isTransfer(x) && !acct && num(x, "amount") > 0) && (!catFilter || (x.category || "Other") === catFilter)).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
   if (!shown.length) root.append(empty("No entries in " + F.monthName(y, m) + " yet. Tap + to add one."));
   const byDay = {};
   for (const x of shown) (byDay[x.date] = byDay[x.date] || []).push(x);
   for (const [day, list] of Object.entries(byDay)) {
     const dd = F.parseIso(day);
-    const total = list.reduce((a, x) => a + num(x, "amount"), 0);
+    const total = list.filter(x => acct || !isTransfer(x)).reduce((a, x) => a + num(x, "amount"), 0);
     root.append(section((dd.getTime() === t.getTime() ? "Today · " : "") + F.dayDate(dd), F.signedMoney(total)));
     root.append(h("div.list", list.map(x => {
       const a = num(x, "amount");
+      if (isTransfer(x)) {
+        const pair = transferPair(x);
+        const from = accountOf(pair.find(p => num(p, "amount") < 0) || x), to = accountOf(pair.find(p => num(p, "amount") > 0) || x);
+        return h("div.row", { onclick: () => openTransfer(x) }, h("span.tile.cat", { style: { background: "color-mix(in srgb, var(--blue) 22%, transparent)" } }, "↔️"),
+          h("div.grow", h("div.title", x.description || "Transfer"), h("div.meta", accountIcon(from) + " " + from + " → " + accountIcon(to) + " " + to)),
+          h("span.right.muted", acct ? F.signedMoney(a) : F.money(Math.abs(a))));
+      }
       return h("div.row", { onclick: () => openEntry(x) }, catTile(x.category),
-        h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (x.repeat ? " · repeating" : ""))),
+        h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (!acct && accountOf(x) !== "Bank" ? " · " + accountIcon(accountOf(x)) + " " + accountOf(x) : "") + (x.repeat ? " · repeating" : ""))),
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     })));
   }
@@ -131,7 +150,7 @@ function donut(top, total) {
 // Income and expenses start fresh each month; this button shows them over all time (corrections left out).
 function totalsBlock() {
   const t = F.today();
-  const all = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd <= t && !isCorrection(x); });
+  const all = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd <= t && !isNeutral(x) && (!acct || accountOf(x) === acct); });
   const inc = all.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -all.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   const box = h("div", { style: { textAlign: "center", marginTop: "10px" } },
@@ -146,14 +165,59 @@ function totalsBlock() {
   return box;
 }
 
-// "Set balance": type what's in your account, the difference becomes a correction (not income or spending).
-async function askBalance() {
-  const now = balanceOn(F.today());
-  const answer = await ask("Set balance", "What's in your account right now?", now.toFixed(2).replace(".", ","), "text");
+// "Set balance" / "Count cash": type what's really there, the difference becomes a correction (not income or spending).
+export async function askBalance(account = "Bank") {
+  const now = balanceOn(F.today(), account);
+  const cash = account === "Cash";
+  const answer = await ask(cash ? "Count your cash" : "Set " + account + " balance", cash ? "How much is in your wallet right now?" : "What's in your " + account + " account right now?", now.toFixed(2).replace(".", ","), "text");
   const v = F.parseAmount(answer);
   if (v == null) return;
-  const diff = setBalance(v);
-  toast(diff === 0 ? "Balance already " + F.money(v) : "Balance set to " + F.money(v) + " (correction " + F.signedMoney(diff) + ")");
+  const diff = setBalance(v, account);
+  toast(diff === 0 ? account + " already " + F.money(v) : account + " set to " + F.money(v) + " (correction " + F.signedMoney(diff) + ")");
+}
+
+// Move money between your accounts - a cash withdrawal is Bank -> Cash. Not income, not spending.
+async function moveDialog() {
+  const accs = accounts();
+  const amount = h("input.field", { inputmode: "decimal", placeholder: "0,00" });
+  const pick = (value) => h("select.field", accs.map(a => h("option", { value: a, selected: a === value }, accountIcon(a) + " " + a)));
+  const from = pick("Bank"), to = pick(accs.includes("Cash") ? "Cash" : accs[1] || accs[0]);
+  const day = h("input.field", { type: "date", value: F.todayIso() });
+  const body = h("div", h("div.small.muted", "E.g. you took 50 € out at the ATM: Bank → Cash."),
+    h("label", h("span.label.caps", "Amount"), calcField(amount)),
+    h("div.grid2", h("label", h("span.label.caps", "From"), from), h("label", h("span.label.caps", "To"), to)),
+    h("label", h("span.label.caps", "Date"), day));
+  const ok = await dialog("Move money", body, [{ label: "Cancel", value: false }, { label: "Move it", value: true, main: true }]);
+  if (!ok) return;
+  const v = F.parseAmount(amount.value);
+  if (v == null || v <= 0) { toast("Nothing moved - type an amount"); return; }
+  if (from.value === to.value) { toast("Pick two different accounts"); return; }
+  const pair = moveMoney(v, from.value, to.value, day.value);
+  toast(pair[0].description + " " + F.money(v), "Undo", () => { for (const e of pair) db.remove("transactions", e); });
+}
+
+function openTransfer(x) {
+  const pair = transferPair(x);
+  const out = pair.find(p => num(p, "amount") < 0) || x, into = pair.find(p => num(p, "amount") > 0) || x;
+  const s = sheet(x.description || "Transfer", h("div",
+    h("div.list", h("div.row", h("div.grow", h("div.meta", "Amount"), h("div.title", F.money(Math.abs(num(x, "amount")))))),
+      h("div.row", h("div.grow", h("div.meta", "From → to"), h("div.title", accountIcon(accountOf(out)) + " " + accountOf(out) + " → " + accountIcon(accountOf(into)) + " " + accountOf(into)))),
+      h("div.row", h("div.grow", h("div.meta", "Date"), h("div.title", F.date(d(x, "date")))))),
+    h("div.small.muted", "Moving money between your accounts isn't income or spending - it only changes where the money is.")), {
+    actions: [btn("Delete", { kind: "danger", icon: "trash", onclick: () => { for (const e of pair) db.remove("transactions", e); s.close();
+      toast("Transfer deleted", "Undo", () => { db.all("transactions").push(...pair); db.save("transactions"); }); } }),
+      btn("Close", { kind: "primary", onclick: () => s.close() })] });
+}
+
+async function addAccount() {
+  const name = await ask("New account", "E.g. PayPal or Savings", "", "text");
+  if (!name) return;
+  const accs = accounts();
+  if (accs.some(a => a.toLowerCase() === name.toLowerCase())) { toast(name + " is already there"); return; }
+  await db.setSetting("accounts", [...accs, name]);
+  acct = name;
+  toast("Account " + name + " added - count it once with “tap to set”");
+  go("money");
 }
 
 function openEntry(x) {
@@ -187,7 +251,7 @@ export function favourites(max = 6) {
   const since = F.iso(F.addDays(F.today(), -90));
   const groups = new Map();
   for (const x of db.all("transactions")) {
-    if (!x.date || x.date < since || x.date > today || x.repeat || isCorrection(x) || /paid back/i.test(x.category || "")) continue;
+    if (!x.date || x.date < since || x.date > today || x.repeat || isNeutral(x) || /paid back/i.test(x.category || "")) continue;
     const key = (x.description || "").trim().toLowerCase();
     if (!key) continue;
     if (!groups.has(key)) groups.set(key, []);
@@ -199,7 +263,7 @@ export function favourites(max = 6) {
     list.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
     const last = list.slice(0, 3).map(x => num(x, "amount"));
     out.push({ description: list[0].description.trim(), category: list[0].category || "", amount: last[0], fixed: last.every(a => Math.abs(a - last[0]) < 0.005),
-      count: list.length, lastDate: list[0].date });
+      count: list.length, lastDate: list[0].date, account: accountOf(list[0]) });
   }
   return out.sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate)).slice(0, max);
 }
@@ -208,8 +272,9 @@ const favLabel = f => catStyle(f.category).emoji + " " + f.description + " " + (
 
 function bookFavourite(f) {
   if (!f.fixed) return entrySheet(f);
-  const e = db.add("transactions", { description: f.description, amount: f.amount, category: f.category || guessCategory(f.description), date: F.todayIso() });
-  toast((f.amount > 0 ? "Income " : "Expense ") + F.money(Math.abs(f.amount)) + " · " + f.description, "Undo", () => db.remove("transactions", e));
+  const account = acct || f.account || "Bank";
+  const e = db.add("transactions", { description: f.description, amount: f.amount, category: f.category || guessCategory(f.description), date: F.todayIso(), ...(account !== "Bank" ? { account } : {}) });
+  toast((f.amount > 0 ? "Income " : "Expense ") + F.money(Math.abs(f.amount)) + " · " + f.description + (account !== "Bank" ? " · " + accountIcon(account) + " " + account : ""), "Undo", () => db.remove("transactions", e));
 }
 
 // "Quick add" row on the Money page.
@@ -229,8 +294,18 @@ function entrySheet(preset) {
   const cat = h("input.field", { list: "money-cats", placeholder: "Category" });
   const day = h("input.field", { type: "date", value: F.todayIso() });
   let picked = false;
+  // which account: the one you're looking at, else what you used for this before (Bäcker -> Cash), else Bank
+  let account = acct || "Bank", accountPicked = !!acct;
+  const accBox = h("div.chips", { style: { flexWrap: "wrap", margin: "8px 0 0" } });
+  const drawAccounts = () => {
+    accBox.innerHTML = "";
+    for (const a of accounts()) accBox.append(h("button.chip" + (a === account ? ".on" : ""), { type: "button", onpointerdown: e => e.preventDefault(),
+      onclick: () => { account = a; accountPicked = true; drawAccounts(); } }, accountIcon(a) + " " + a));
+  };
+  drawAccounts();
   const fill = f => {
     what.value = f.description; cat.value = f.category || ""; picked = !!cat.value; chips && chips.redraw();
+    if (!accountPicked && f.account) { account = f.account; drawAccounts(); }
     isIncome = f.amount > 0; drawToggle();
     amount.value = f.fixed ? F.plainAmount(Math.abs(f.amount)) : "";
     amount.dispatchEvent(new Event("input"));
@@ -244,7 +319,10 @@ function entrySheet(preset) {
   const catBox = h("div");
   let chips = null;
   const drawCats = () => { catBox.innerHTML = ""; chips = choiceChips(cat, catsFor(isIncome), c => catStyle(c).emoji + " " + c); catBox.append(chips); };
-  what.addEventListener("input", () => { if (!picked) { cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; chips && chips.redraw(); } });
+  what.addEventListener("input", () => {
+    if (!picked) { cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; chips && chips.redraw(); }
+    if (!accountPicked) { const g = guessAccount(what.value) || "Bank"; if (g !== account) { account = g; drawAccounts(); } }
+  });
   const toggle = h("div.seg");
   const drawToggle = () => {
     toggle.innerHTML = "";
@@ -261,13 +339,13 @@ function entrySheet(preset) {
     if (v == null || v <= 0) { amount.focus(); toast("Type the amount first"); return; }
     const desc = what.value.trim() || (isIncome ? "Income" : "Expense");
     const c = cat.value.trim() || guessCategory(desc).replace(/^Other$/, isIncome ? "Income" : "Other");
-    const e = db.add("transactions", { description: desc, amount: isIncome ? v : -v, category: c, date: day.value || F.todayIso() });
+    const e = db.add("transactions", { description: desc, amount: isIncome ? v : -v, category: c, date: day.value || F.todayIso(), ...(account !== "Bank" ? { account } : {}) });
     income = isIncome;
     s.close();
-    toast((isIncome ? "Income " : "Expense ") + F.money(v) + " · " + desc, "Undo", () => db.remove("transactions", e));
+    toast((isIncome ? "Income " : "Expense ") + F.money(v) + " · " + desc + (account !== "Bank" ? " · " + accountIcon(account) + " " + account : ""), "Undo", () => db.remove("transactions", e));
   };
   for (const el of [amount, what, cat]) el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-  const s = sheet("New entry", h("div", toggle, favBox, calcField(amount),
+  const s = sheet("New entry", h("div", toggle, accBox, favBox, calcField(amount),
     h("label", h("span.label.caps", "What for"), what),
     h("label", h("span.label.caps", "Category"), cat), catBox,
     h("label", h("span.label.caps", "Date"), day),

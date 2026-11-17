@@ -26,12 +26,12 @@ export const KINDS = {
 
   transactions: { title: "Money", one: "Entry", icon: "wallet", color: "--money", titleKey: "description", fields: [
     f("description", "Description", "text"), f("amount", "Amount", "money", { hint: "−12,50 for an expense" }),
-    f("category", "Category", "open"), f("date", "Date", "date"), f("notes", "Notes", "long")],
+    f("category", "Category", "open"), f("account", "Account", "open", { choices: ["Bank", "Cash"] }), f("date", "Date", "date"), f("notes", "Notes", "long")],
     defaults: () => ({ date: F.todayIso() }) },
 
   repeats: { title: "Repeating entries", one: "Repeating entry", icon: "repeat", color: "--money", titleKey: "description", fields: [
     f("description", "Description", "text"), f("amount", "Amount", "money", { hint: "negative = expense" }),
-    f("category", "Category", "open"), f("day", "Day of month", "number"), f("paused", "Paused", "bool")],
+    f("category", "Category", "open"), f("account", "Account", "open", { choices: ["Bank", "Cash"] }), f("day", "Day of month", "number"), f("paused", "Paused", "bool")],
     defaults: () => ({ day: 1, lastAdded: F.monthKey(F.addMonths(F.today(), -1)) }) },
 
   shopping: { title: "Shopping list", one: "Item", icon: "cart", color: "--home", titleKey: "item", fields: [
@@ -127,22 +127,57 @@ export function choreDone(r) {
 // A balance correction only fixes the balance - it's not income or spending.
 export const isCorrection = r => /correction|korrektur/i.test(r?.category || "");
 
-// What you have on a day: every entry up to and including it, carried over from month to month.
-export function balanceOn(day) {
+// ---------------- Accounts: Bank, Cash (and any you add) ----------------
+// An entry without an account is Bank. Moving money between accounts (a cash withdrawal) is a pair of entries with
+// the category "Transfer" - it's neither income nor spending, like a balance correction.
+export const ACCOUNTS = ["Bank", "Cash"];
+export const accounts = () => { const a = db.setting("accounts", null); return Array.isArray(a) && a.length ? a : ACCOUNTS; };
+export const accountOf = x => (x && x.account) || "Bank";
+export const accountIcon = a => a === "Cash" ? "💵" : a === "Bank" ? "🏦" : /paypal/i.test(a) ? "🅿️" : /sav|spar/i.test(a) ? "🐷" : "💳";
+export const isTransfer = x => x?.category === "Transfer" && !!x.transfer;
+// not income or spending: balance corrections and money moved between your own accounts
+export const isNeutral = x => isCorrection(x) || isTransfer(x);
+
+// What you have on a day: every entry up to and including it, carried over from month to month (one account or all).
+export function balanceOn(day, account) {
   const end = F.iso(day);
-  return db.all("transactions").filter(x => x.date && x.date <= end).reduce((a, x) => a + num(x, "amount"), 0);
+  return db.all("transactions").filter(x => x.date && x.date <= end && (!account || accountOf(x) === account)).reduce((a, x) => a + num(x, "amount"), 0);
 }
 
-// "Set balance": you say what's really in your account, the difference is booked as today's correction
-// (an existing correction from today is adjusted instead of adding a second one). Returns the difference.
-export function setBalance(target) {
+// "Set balance": you say what's really in an account (or in your wallet), the difference is booked as today's correction
+// there (an existing correction from today is adjusted instead of adding a second one). Returns the difference.
+export function setBalance(target, account = "Bank") {
   const today = F.todayIso();
-  const diff = Math.round((target - balanceOn(F.today())) * 100) / 100;
+  if (account === "Cash") db.setSetting("cashChecked", today);
+  const diff = Math.round((target - balanceOn(F.today(), account)) * 100) / 100;
   if (Math.abs(diff) < 0.005) return 0;
-  const existing = db.all("transactions").find(x => isCorrection(x) && x.date === today);
+  const existing = db.all("transactions").find(x => isCorrection(x) && x.date === today && accountOf(x) === account);
   if (existing) { existing.amount = Math.round((num(existing, "amount") + diff) * 100) / 100; db.touch(existing); db.save("transactions"); }
-  else db.add("transactions", { description: "Balance correction", amount: diff, category: "Correction", date: today, notes: "Set balance to " + F.money(target) });
+  else db.add("transactions", { description: "Balance correction", amount: diff, category: "Correction", account, date: today, notes: "Set " + account + " to " + F.money(target) });
   return diff;
+}
+
+// Move money between your accounts: "Cash withdrawal" (Bank -> Cash), "Cash deposit" (Cash -> Bank), or a transfer.
+export function moveMoney(amount, from, to, dateIso) {
+  const link = db.newId();
+  const description = from === "Bank" && to === "Cash" ? "Cash withdrawal" : from === "Cash" && to === "Bank" ? "Cash deposit" : "Transfer " + from + " → " + to;
+  const date = dateIso || F.todayIso();
+  const out = db.add("transactions", { description, amount: -amount, category: "Transfer", account: from, date, transfer: link });
+  const into = db.add("transactions", { description, amount, category: "Transfer", account: to, date, transfer: link });
+  return [out, into];
+}
+export const transferPair = x => db.all("transactions").filter(t => t.transfer && t.transfer === x.transfer);
+
+// Which account an entry is paid from: the one you used most for the same description lately (Bäcker -> Cash), else Bank.
+export function guessAccount(description) {
+  const text = (description || "").trim().toLowerCase();
+  if (!text) return null;
+  const same = db.all("transactions").filter(t => !isNeutral(t) && (t.description || "").trim().toLowerCase() === text)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 5);
+  if (!same.length) return null;
+  const count = {};
+  for (const t of same) count[accountOf(t)] = (count[accountOf(t)] || 0) + 1;
+  return Object.entries(count).sort((a, b) => b[1] - a[1])[0][0];
 }
 
 // Puts an entry into Money (negative = expense).
@@ -202,6 +237,7 @@ export const bookedByHand = (rule, key) => db.all("transactions").some(x => x.re
 function bookRepeat(rule, key, dateIso, amount) {
   const e = { id: db.newId(), created: db.stamp(), updated: db.stamp(), description: rule.description, amount,
     category: rule.category || "Other", date: dateIso, repeat: rule.id, repeatMonth: key };
+  if (rule.account && rule.account !== "Bank") e.account = rule.account;
   db.all("transactions").push(e);
   rule.lastAdded = key;
   delete rule.notYet;
