@@ -56,7 +56,23 @@ export function render() {
   if (shownKey !== null && key !== shownKey) { page.classList.remove("enter"); void page.offsetWidth; page.classList.add("enter"); }
   shownKey = key;
   window.scrollTo(0, scrollMemory[key] || 0);
+  updateTopbar();
   drawTabs(tab);
+}
+
+// The big page title shrinks away when you scroll and comes back small in a glass bar at the top.
+let topbar = null;
+function updateTopbar() {
+  if (!topbar) { topbar = document.createElement("div"); topbar.id = "topbar"; document.body.append(topbar); }
+  const h1 = document.querySelector("#page .head h1");
+  const y = window.scrollY;
+  if (h1) {
+    const f = Math.min(1, Math.max(0, y / 44));
+    h1.style.opacity = String(1 - f);
+    h1.style.transform = f ? "scale(" + (1 - f * 0.08) + ")" : "";
+    topbar.textContent = h1.textContent;
+  }
+  topbar.classList.toggle("show", !!h1 && y > 38);
 }
 
 function drawTabs(active) {
@@ -164,7 +180,7 @@ async function start() {
   setDatesSource(() => reminders.all());
   db.listen(name => { if (name === "settings") applyTheme(); changed(name); });
   window.addEventListener("hashchange", () => { render(); });
-  window.addEventListener("scroll", () => { scrollMemory[location.hash] = window.scrollY; }, { passive: true });
+  window.addEventListener("scroll", () => { scrollMemory[location.hash] = window.scrollY; updateTopbar(); }, { passive: true });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !isOpen()) { runAuto(); redraw(); notifyToday(); }
   });

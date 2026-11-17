@@ -214,7 +214,7 @@ textarea.field { min-height: 92px; resize: vertical; }
 
 /* movement: pages slide in, ticks pop, the ring turns in, confetti when today is done */
 @keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-#page.enter { animation: pageIn .24s ease-out; }
+#page.enter > * { animation: pageIn .24s ease-out; }   /* the children, so the fixed + button and bars stay put */
 @keyframes tickPop { 0% { transform: scale(.8); } 45% { transform: scale(1.28); } 100% { transform: scale(1); } }
 .tick.pop { animation: tickPop .28s cubic-bezier(.3,1.6,.5,1); }
 .row.ticked .title { color: var(--faint); text-decoration: line-through; transition: color .2s; }
@@ -227,5 +227,132 @@ textarea.field { min-height: 92px; resize: vertical; }
 .confetti i { position: absolute; top: -14px; width: 8px; height: 13px; border-radius: 2px; opacity: .95; animation: confettiFall 1.5s ease-in forwards; }
 @keyframes confettiFall { to { transform: translate(var(--dx), 105vh) rotate(var(--rot)); opacity: .8; } }
 @media (prefers-reduced-motion: reduce) {
-  #page.enter, .tick.pop, #page.enter .donut { animation: none; }
+  #page.enter > *, .tick.pop, #page.enter .donut { animation: none; }
 }
+
+/* =====================================================================================================
+   Glass - inspired by the iPhone's frosted glass: soft colour light behind everything, see-through
+   surfaces with a fine bright edge, a floating tab bar and a top bar that blur what scrolls beneath.
+   ===================================================================================================== */
+:root {
+  --glass: rgba(52, 52, 49, .52);
+  --glass-strong: rgba(44, 44, 42, .72);
+  --glass-border: rgba(255, 255, 255, .09);
+  --glass-hi: rgba(255, 255, 255, .08);
+  --glass-raise: rgba(255, 255, 255, .13);
+  --glass-shadow: 0 6px 24px rgba(0, 0, 0, .22);
+  --glow1: color-mix(in srgb, var(--accent) 40%, transparent);
+  --glow2: color-mix(in srgb, var(--notes) 34%, transparent);
+  --glow3: color-mix(in srgb, var(--today) 30%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --glass: rgba(255, 255, 255, .58);
+    --glass-strong: rgba(255, 255, 255, .78);
+    --glass-border: rgba(255, 255, 255, .85);
+    --glass-hi: rgba(255, 255, 255, .9);
+    --glass-raise: rgba(255, 255, 255, .95);
+    --glass-shadow: 0 6px 24px rgba(60, 50, 30, .08);
+    --glow1: color-mix(in srgb, var(--accent) 22%, transparent);
+    --glow2: color-mix(in srgb, var(--notes) 18%, transparent);
+    --glow3: color-mix(in srgb, var(--today) 18%, transparent);
+  }
+}
+:root[data-theme="light"] {
+  --glass: rgba(255, 255, 255, .58);
+  --glass-strong: rgba(255, 255, 255, .78);
+  --glass-border: rgba(255, 255, 255, .85);
+  --glass-hi: rgba(255, 255, 255, .9);
+  --glass-raise: rgba(255, 255, 255, .95);
+  --glass-shadow: 0 6px 24px rgba(60, 50, 30, .08);
+  --glow1: color-mix(in srgb, var(--accent) 22%, transparent);
+  --glow2: color-mix(in srgb, var(--notes) 18%, transparent);
+  --glow3: color-mix(in srgb, var(--today) 18%, transparent);
+}
+
+/* the soft colour light behind the glass */
+body::before {
+  content: ""; position: fixed; inset: -10%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(42% 32% at 12% 8%, var(--glow1), transparent 70%),
+    radial-gradient(38% 30% at 92% 30%, var(--glow2), transparent 70%),
+    radial-gradient(48% 34% at 60% 100%, var(--glow3), transparent 70%);
+}
+
+/* see-through surfaces */
+.card, .list, .stat {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+.cal .day { background: var(--glass); border-color: var(--glass-border); }
+.cal .day.sel { background: color-mix(in srgb, var(--accent) 30%, var(--glass)); }
+.btn { background: var(--glass); border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--glass-hi); }
+.btn.ghost { background: none; border-color: transparent; box-shadow: none; }
+.btn.soft { background: color-mix(in srgb, var(--accent) 20%, transparent); border-color: transparent; box-shadow: inset 0 1px 0 var(--glass-hi); }
+.btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 82%, #fff), var(--accent)); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+.chip { background: var(--glass); border-color: var(--glass-border); box-shadow: inset 0 1px 0 var(--glass-hi); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.chip.on { background: color-mix(in srgb, var(--accent) 28%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.field, select.field, textarea.field { background: color-mix(in srgb, var(--card2) 62%, transparent); border-color: var(--glass-border); }
+.seg { background: var(--glass); border-color: var(--glass-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.seg button.on { background: var(--glass-raise); box-shadow: 0 2px 8px rgba(0,0,0,.15), inset 0 1px 0 var(--glass-hi); }
+
+/* sheets, dialogs and toasts float on frosted glass */
+.dim { background: rgba(0, 0, 0, .32); }
+.sheet {
+  background: var(--glass-strong); border-top: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 -10px 40px rgba(0,0,0,.25);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border-radius: 28px 28px 0 0;
+}
+.dialog {
+  background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 26px;
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 20px 50px rgba(0,0,0,.3);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+}
+.toast {
+  background: var(--glass-strong); color: var(--text); border: 1px solid var(--glass-border); border-radius: 999px; padding: 11px 18px;
+  bottom: calc(var(--safe-bottom) + 100px);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 10px 30px rgba(0,0,0,.25);
+  backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+.toast b { color: var(--accent); }
+
+/* the floating glass tab bar - the open page sits in a soft bubble */
+#page { padding-bottom: calc(var(--safe-bottom) + 108px); }
+#tabs {
+  left: 12px; right: 12px; bottom: calc(var(--safe-bottom) + 8px);
+  max-width: 560px; margin: 0 auto;
+  padding: 6px; border-radius: 30px;
+  background: var(--glass-strong); border: 1px solid var(--glass-border); border-top: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), 0 10px 34px rgba(0,0,0,.28);
+  backdrop-filter: blur(26px) saturate(180%); -webkit-backdrop-filter: blur(26px) saturate(180%);
+}
+#tabs button { padding: 7px 0 5px; border-radius: 24px; z-index: 0; transition: color .2s; }
+#tabs button::before {
+  content: ""; position: absolute; inset: 0 4px; border-radius: 24px; z-index: -1;
+  background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 1px 0 var(--glass-hi);
+  opacity: 0; transform: scale(.7); transition: opacity .22s, transform .28s cubic-bezier(.3,1.5,.5,1);
+}
+#tabs button.on::before { opacity: 1; transform: scale(1); }
+#tabs button.on { color: var(--accent); }
+#tabs button.on svg { stroke-width: 2.4; }
+#tabs .badge { top: 1px; }
+.fab {
+  bottom: calc(var(--safe-bottom) + 98px); border-radius: 20px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 80%, #fff), var(--accent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 10px 26px color-mix(in srgb, var(--accent) 40%, rgba(0,0,0,.3));
+}
+
+/* the big title shrinks into a glass bar at the top when you scroll */
+#topbar {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 19; pointer-events: none;
+  padding: calc(var(--safe-top) + 10px) 16px 10px; text-align: center;
+  font-weight: 700; font-size: 16.5px; letter-spacing: -.1px;
+  background: var(--glass-strong); border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+  opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .2s;
+}
+#topbar.show { opacity: 1; transform: none; }
+.head h1 { transform-origin: left center; will-change: opacity, transform; }
