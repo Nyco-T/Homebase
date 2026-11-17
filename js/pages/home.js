@@ -110,7 +110,8 @@ export function undoTask(x) {
 
 function comingUpCard() {
   const t = F.today();
-  const items = reminders.between(F.addDays(t, 1), F.addDays(t, 14)).filter(x => x.kind !== "backup");
+  // money (salary, rent …) isn't listed ahead here - it shows in Money on its day and stays there
+  const items = reminders.between(F.addDays(t, 1), F.addDays(t, 14)).filter(x => !["backup", "transactions", "repeats"].includes(x.kind));
   const c = card("Coming up", "calendar", "--today", "plan/calendar");
   if (!items.length) { c.append(h("div.small.muted", "Nothing in the next two weeks. Add an event like “termin Zahnarzt 24.11.” or a birthday.")); return c; }
   for (const x of items.slice(0, 6)) c.append(row(tile(x.icon, x.color), x.title, x.detail, h("span.small.muted", F.relative(x.date)), () => openItem(x)));
