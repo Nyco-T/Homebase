@@ -16,7 +16,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.0.19";
+export const VERSION = "1.0.20";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };

@@ -94,7 +94,9 @@ export const isOpen = () => openCount > 0;
 // A sheet that slides up from the bottom. Returns {el, close}. onClose runs once when it's gone.
 export function sheet(title, content, { actions = [], onClose } = {}) {
   const dim = h("div.dim");
-  const box = h("div.sheet", h("div.grip"), title ? h("h3.serif", title) : null, content,
+  // only the top bar (grip + title) closes the sheet with a swipe down - scrolling the content never does
+  const head = h("div.sheethead", h("div.grip"), title ? h("h3.serif", title) : null);
+  const box = h("div.sheet", head, content,
     actions.length ? h("div.actions", actions) : null);
   layer().append(dim, box);
   openCount++;
@@ -110,8 +112,9 @@ export function sheet(title, content, { actions = [], onClose } = {}) {
   };
   dim.addEventListener("click", close);
   let startY = null;
-  box.addEventListener("touchstart", e => { if (box.scrollTop <= 0) startY = e.touches[0].clientY; }, { passive: true });
-  box.addEventListener("touchmove", e => { if (startY != null && e.touches[0].clientY - startY > 90) { startY = null; close(); } }, { passive: true });
+  head.addEventListener("touchstart", e => { startY = e.touches[0].clientY; }, { passive: true });
+  head.addEventListener("touchmove", e => { if (startY != null && e.touches[0].clientY - startY > 70) { startY = null; close(); } }, { passive: true });
+  head.addEventListener("touchend", () => { startY = null; }, { passive: true });
   return { el: box, close };
 }
 
