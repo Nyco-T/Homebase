@@ -142,7 +142,8 @@ textarea.field { min-height: 92px; resize: vertical; }
 .cal .dow { text-align: center; font-size: 11px; color: var(--faint); font-weight: 700; padding: 4px 0; }
 .cal .day { aspect-ratio: 1 / 1.05; border-radius: 10px; background: var(--card); border: 1px solid var(--border); padding: 4px; display: flex; flex-direction: column; align-items: center; font-size: 13.5px; }
 .cal .day.other { opacity: .35; }
-.cal .day.today { border-color: var(--accent); }
+.cal .day.today { border-color: var(--accent); border-width: 2px; }
+.cal .day.today span { background: var(--accent); color: var(--on-accent); font-weight: 700; border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; }
 .cal .day.sel { background: color-mix(in srgb, var(--accent) 26%, var(--card)); }
 .cal .dots { display: flex; gap: 2px; margin-top: auto; margin-bottom: 2px; flex-wrap: wrap; justify-content: center; }
 .cal .dots i { width: 5px; height: 5px; border-radius: 50%; display: block; }

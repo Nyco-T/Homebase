@@ -202,7 +202,7 @@ export function dues() {
   const out = [];
   for (const e of db.all("events")) {
     const n = nextEvent(e);
-    if (n) out.push({ date: n, title: e.title || "Event", detail: [e.time, e.place].filter(Boolean).join(" · "), kind: "events", id: e.id, lead: 1, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
+    if (n) out.push({ date: n, title: e.title || "Event", detail: [e.time, e.place, e.source === "iphone" ? "iPhone" : ""].filter(Boolean).join(" · "), kind: "events", id: e.id, lead: 1, icon: e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", color: "--today" });
   }
   for (const r of db.all("tasks")) {
     const due = d(r, "due");

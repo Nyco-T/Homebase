@@ -24,6 +24,7 @@ const P = {
   download: '<path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5M4 14v6h16v-6"/>',
   upload: '<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8M4 14v6h16v-6"/>',
   down: '<path d="M6 9l6 6 6-6"/>', trend: '<path d="M3 6l6 6 4-3 8 9M15 18h6v-6"/>',
+  phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
 };
 

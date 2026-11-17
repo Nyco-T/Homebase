@@ -80,7 +80,7 @@ function todayCard() {
     .sort((a, b) => (a.due || "").localeCompare(b.due || ""));
   const events = db.all("events").filter(e => { const n = nextEvent(e); return n && n.getTime() === t.getTime(); });
   const chores = db.all("chores").filter(x => nextChore(x) <= t);
-  for (const e of events) c.append(row(tile(e.category === "Birthday" ? "gift" : "calendar", "--today"), e.title, [e.time, e.place].filter(Boolean).join(" · ") || "today", null, () => openItem({ kind: "events", id: e.id })));
+  for (const e of events) c.append(row(tile(e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", "--today"), e.title, [e.time, e.place].filter(Boolean).join(" · ") || "today", null, () => openItem({ kind: "events", id: e.id })));
   for (const x of tasks.slice(0, 6)) {
     const due = d(x, "due");
     c.append(row(tickBox(false, () => { finishTask(x); toast("Done: " + x.title, "Undo", () => undoTask(x)); }), x.title, x.list || "",

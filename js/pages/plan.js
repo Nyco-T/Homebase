@@ -9,11 +9,13 @@ import { editRecord, newRecord } from "../form.js";
 import * as reminders from "../reminders.js";
 import { go, openItem } from "../app.js";
 import { undoTask } from "./home.js";
+import * as phonecal from "../phonecal.js";
 
 const TABS = ["tasks", "calendar", "chores"];
 let taskFilter = "open";
 let calMonth = null;
 let calDay = null;
+let calFor = "";   // the day the calendar was opened - a new day jumps back to today
 
 export function render(root, sub) {
   const tab = TABS.includes(sub) ? sub : "tasks";
@@ -101,6 +103,7 @@ function taskRow(x) {
 
 function calendar(root) {
   const t = F.today();
+  if (calFor !== F.todayIso()) { calFor = F.todayIso(); calMonth = null; calDay = null; }
   calMonth = calMonth || new Date(t.getFullYear(), t.getMonth(), 1);
   calDay = calDay || t;
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
@@ -112,7 +115,7 @@ function calendar(root) {
 
   const start = F.mondayOf(new Date(y, m, 1));
   const end = F.addDays(start, 41);
-  const items = reminders.between(start, end).filter(x => x.kind !== "backup");
+  const items = reminders.between(start, end).filter(x => !["backup", "phonecal"].includes(x.kind));
   const byDay = {};
   for (const x of items) (byDay[F.iso(x.date)] = byDay[F.iso(x.date)] || []).push(x);
   // repeating events: every repeat in this month view, not only the next one
@@ -144,6 +147,18 @@ function calendar(root) {
     btn("Event", { icon: "plus", onclick: () => newRecord("events", { date: F.iso(calDay) }) }),
     btn("Birthday", { icon: "gift", onclick: () => newRecord("events", { date: F.iso(calDay), repeat: "Yearly", category: "Birthday", title: "" }) }),
     btn("Task", { icon: "check", onclick: () => newRecord("tasks", { due: F.iso(calDay) }) })));
+
+  // the iPhone's own calendar, read through a Shortcut
+  const last = phonecal.lastRead();
+  const count = db.all("events").filter(phonecal.isPhone).length;
+  root.append(section("iPhone calendar", last ? "read " + F.relative(F.parseIso(last)) + " " + last.slice(11, 16) : ""));
+  root.append(h("div.list", h("div.row", tile("phone", "--today"),
+    h("div.grow", h("div.title", last ? F.plural(count, "event", "events") + " from your iPhone" : "Show your iPhone calendar here"),
+      h("div.meta", { style: { whiteSpace: "normal" } }, last ? "Run the shortcut “Homebase Kalender”, then Update." : "Set up a small shortcut once - then your iPhone events show up in Homebase.")),
+    last ? h("div", { style: { display: "flex", gap: "4px" } },
+      h("button.btn.ghost.small", { html: icon("gear", 18), onclick: phonecal.setupSheet, "aria-label": "How to set it up" }),
+      btn("Update", { kind: "soft", small: true, onclick: phonecal.update }))
+      : btn("Set up", { kind: "soft", small: true, onclick: phonecal.setupSheet }))));
 }
 
 // ---------------- Chores ----------------

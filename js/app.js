@@ -9,13 +9,14 @@ import { register as registerRules, setDatesSource } from "./rules.js";
 import * as auto from "./auto.js";
 import * as reminders from "./reminders.js";
 import { editRecord } from "./form.js";
+import * as phonecal from "./phonecal.js";
 import * as home from "./pages/home.js";
 import * as plan from "./pages/plan.js";
 import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.0.14";
+export const VERSION = "1.0.15";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -35,8 +36,10 @@ export function openItem(item) {
   if (!item) return;
   if (item.kind === "backup") return go("more/settings");
   if (item.kind === "transactions" && !item.id) return go("money");
+  if (item.kind === "phonecal") return phonecal.update();   // from a tap, so the clipboard may be read
   const rec = item.id && db.byId(item.kind, item.id);
-  if (rec) editRecord(item.kind, rec);
+  if (rec && phonecal.isPhone(rec)) phonecal.show(rec);
+  else if (rec) editRecord(item.kind, rec);
   else go({ events: "plan/calendar", tasks: "plan/tasks", chores: "plan/chores", repeats: "money/repeats", meals: "food/meals" }[item.kind] || "home");
 }
 

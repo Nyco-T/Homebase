@@ -88,6 +88,13 @@ export function register() {
     });
 
   // ---------------- Tasks & calendar ----------------
+  reminder("tasks.phone-calendar", "tasks", "Keep the iPhone calendar fresh",
+    "Once you read your iPhone calendar into Homebase, the bell reminds you after 2 days to update it (one tap - Homebase reads what the shortcut copied).", () => {
+      const last = F.parseIso(db.setting("phonecal.last", ""));
+      if (!last || F.daysBetween(last, F.today()) < 2) return [];
+      return [{ date: F.today(), title: "Update your iPhone calendar", detail: "last read " + F.relative(last) + " · tap to read it", kind: "phonecal", id: null, lead: 0, icon: "phone", color: "--today" }];
+    });
+
   rule("tasks.postponed", "tasks", "Moved too often",
     "A task whose due date was pushed back three times gets a nudge: move it to Someday?", 2, NEVER, () =>
       db.all("tasks").filter(t => !isOn(t, "done") && t.due && (t.postponed || 0) >= 3).map(t =>

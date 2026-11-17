@@ -2,12 +2,12 @@
 // A new version (new VERSION here) is downloaded in the background on an online start; the app then shows
 // "New version ready - Reload". Your data is in IndexedDB and is never touched by this file.
 
-const VERSION = "1.0.14";
+const VERSION = "1.0.15";
 const CACHE = "homebase-" + VERSION;
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/app.js", "js/db.js", "js/fmt.js", "js/kinds.js", "js/ui.js", "js/form.js", "js/quick.js",
-  "js/auto.js", "js/rules.js", "js/reminders.js", "js/cook.js", "js/recipeparse.js",
+  "js/auto.js", "js/rules.js", "js/reminders.js", "js/cook.js", "js/recipeparse.js", "js/phonecal.js",
   "js/pages/home.js", "js/pages/plan.js", "js/pages/money.js", "js/pages/food.js", "js/pages/more.js",
   "icons/icon.svg", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"
 ];
