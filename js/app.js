@@ -16,7 +16,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.1.1";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -46,6 +46,7 @@ export function openItem(item) {
 
 let scrollMemory = {};
 let shownKey = null;
+let enterTimer = null;
 export function render() {
   const { tab, sub } = route();
   const page = document.getElementById("page");
@@ -53,7 +54,11 @@ export function render() {
   page.innerHTML = "";
   PAGES[tab].render(page, sub);
   // a new page slides in softly - a redraw after a change on the same page doesn't
-  if (shownKey !== null && key !== shownKey) { page.classList.remove("enter"); void page.offsetWidth; page.classList.add("enter"); }
+  if (shownKey !== null && key !== shownKey) {
+    page.classList.remove("enter"); void page.offsetWidth; page.classList.add("enter");
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => page.classList.remove("enter"), 600);   // so a later redraw doesn't slide in again
+  } else if (key === shownKey) page.classList.remove("enter");
   shownKey = key;
   window.scrollTo(0, scrollMemory[key] || 0);
   updateTopbar();
@@ -99,7 +104,8 @@ function badgeCounts() {
 // Redraw after data changes - but not under your fingers while you type in a field on the page.
 let redrawTimer = null;
 function changed(what) {
-  if (!["automarks", "autolog", "dismissed"].includes(what)) scheduleAuto();
+  // the automation's own signals don't start it again (that was a loop: run -> "automation" -> run … every 1.5 s)
+  if (!["automarks", "autolog", "dismissed", "automation"].includes(what)) scheduleAuto();
   clearTimeout(redrawTimer);
   redrawTimer = setTimeout(redraw, 60);
 }
