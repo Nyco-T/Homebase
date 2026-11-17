@@ -120,7 +120,7 @@ function comingUpCard() {
 
 function moneyCard() {
   const t = F.today();
-  const month = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === t.getFullYear() && dd.getMonth() === t.getMonth(); });
+  const month = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === t.getFullYear() && dd.getMonth() === t.getMonth() && dd <= t; });
   const income = month.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const spent = -month.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   const c = card("Money this month", "wallet", "--money", "money");

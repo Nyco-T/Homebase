@@ -26,7 +26,8 @@ function entries(root) {
   const t = F.today();
   const y = month.getFullYear(), m = month.getMonth();
   const current = y === t.getFullYear() && m === t.getMonth();
-  const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m; });
+  // an entry booked for a later day (the salary on the 28th) only shows from that day on
+  const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m && dd <= t; });
   const inc = inMonth.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -inMonth.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
 
@@ -69,7 +70,7 @@ function entries(root) {
   for (const [day, list] of Object.entries(byDay)) {
     const dd = F.parseIso(day);
     const total = list.reduce((a, x) => a + num(x, "amount"), 0);
-    root.append(section((dd.getTime() === t.getTime() ? "Today · " : dd > t ? "Coming · " : "") + F.dayDate(dd), F.signedMoney(total)));
+    root.append(section((dd.getTime() === t.getTime() ? "Today · " : "") + F.dayDate(dd), F.signedMoney(total)));
     root.append(h("div.list", list.map(x => {
       const a = num(x, "amount");
       return h("div.row", { onclick: () => openEntry(x) },
