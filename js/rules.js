@@ -63,7 +63,7 @@ export function register() {
     });
 
   reminder("money.expected", "money", "Repeating payments in the calendar",
-    "Rent, salary and other repeating entries show on the calendar on the day they come.", () => {
+    "Rent, salary and other repeating entries - and Money entries booked for a later day - show on the calendar on the day they come.", () => {
       const out = [];
       const t = F.today();
       for (const r of db.all("repeats")) {
@@ -72,8 +72,17 @@ export function register() {
           const m = new Date(t.getFullYear(), t.getMonth() + i, 1);
           if ((r.lastAdded || "") >= F.monthKey(m)) continue;
           const day = new Date(m.getFullYear(), m.getMonth(), Math.max(1, Math.min(num(r, "day") || 1, F.daysInMonth(m.getFullYear(), m.getMonth()))));
-          if (day >= t) out.push({ date: day, title: r.description + " " + F.signedMoney(num(r, "amount")), detail: "repeating entry", kind: "repeats", id: r.id, lead: -1, icon: "repeat", color: "--money" });
+          // already booked by hand in that month (same text and amount)? then the booked entry shows instead
+          const booked = db.all("transactions").some(x => (x.repeat === r.id || ((x.description || "").toLowerCase() === (r.description || "").toLowerCase() && Math.abs(num(x, "amount") - num(r, "amount")) < 0.01))
+            && (x.date || "").startsWith(F.monthKey(m)));
+          if (day >= t && !booked) out.push({ date: day, title: r.description + " " + F.signedMoney(num(r, "amount")), detail: "repeating entry", kind: "repeats", id: r.id, lead: -1, icon: "repeat", color: "--money" });
         }
+      }
+      // entries already booked for a later day (e.g. the salary on the 28th) show on their day too
+      const limit = F.addDays(t, 60);
+      for (const x of db.all("transactions")) {
+        const day = d(x, "date");
+        if (day && day > t && day <= limit) out.push({ date: day, title: (x.description || "Entry") + " " + F.signedMoney(num(x, "amount")), detail: "booked in Money", kind: "transactions", id: x.id, lead: -1, icon: "wallet", color: "--money" });
       }
       return out;
     });
