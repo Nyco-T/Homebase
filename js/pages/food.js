@@ -8,6 +8,7 @@ import { quickAdd } from "../quick.js";
 import { editRecord, newRecord } from "../form.js";
 import { isStaple } from "../rules.js";
 import { go } from "../app.js";
+import { match, recentlyBought } from "../cook.js";
 
 const TABS = ["shopping", "meals", "recipes"];
 const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -173,7 +174,37 @@ function mealSheet(m) {
 
 // ---------------- Recipes ----------------
 
+let cookText = null;
+
+// "What can I cook?": what you have -> your recipes, best match first.
+function cookCard() {
+  if (cookText === null) cookText = recentlyBought().join(", ");
+  const input = h("textarea.field", { rows: 2, placeholder: "What's at home? Nudeln, Tomaten, Käse …" });
+  input.value = cookText;
+  const results = h("div");
+  const draw = () => {
+    results.innerHTML = "";
+    const found = match(input.value).slice(0, 6);
+    if (!input.value.trim()) { results.append(h("div.small.muted", { style: { marginTop: "8px" } }, "Type what you have - oil, salt and the like count by themselves.")); return; }
+    if (!found.length) { results.append(h("div.small.muted", { style: { marginTop: "8px" } }, "None of your recipes fits yet.")); return; }
+    for (const m of found) {
+      const r = m.recipe;
+      results.append(h("div.row",
+        tile("pot", m.missing.length ? "--home" : "--money"),
+        h("div.grow", h("div.title", r.name), h("div.meta", { style: { whiteSpace: "normal" } }, m.missing.length ? m.have + " of " + m.total + " · missing: " + m.missing.join(", ") : "you have everything" + (r.minutes ? " · " + r.minutes + " min" : ""))),
+        h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
+          btn("Plan", { kind: "soft", small: true, onclick: () => { db.add("meals", { title: r.name, date: F.todayIso(), slot: new Date().getHours() < 11 ? "Lunch" : "Dinner", recipe: r.id }); toast(r.name + " planned for today"); } }),
+          m.missing.length ? btn("+ List", { kind: "ghost", small: true, onclick: () => { for (const x of m.missing) db.add("shopping", { item: x, done: false, notes: r.name }); toast(F.plural(m.missing.length, "item", "items") + " on the shopping list"); } }) : null)));
+    }
+  };
+  input.addEventListener("input", () => { cookText = input.value; draw(); });
+  draw();
+  return h("div.card", h("div.cardhead", h("h2", tile("pot", "--home"), "What can I cook?"),
+    btn("Reset", { kind: "ghost", small: true, onclick: () => { cookText = recentlyBought().join(", "); input.value = cookText; draw(); } })), input, results);
+}
+
 function recipes(root) {
+  if (db.all("recipes").length) root.append(cookCard());
   const search = h("input.field", { placeholder: "Search recipes", value: recipeSearch, type: "search" });
   search.addEventListener("input", () => { recipeSearch = search.value; drawList(); });
   root.append(h("div.quick", search));
