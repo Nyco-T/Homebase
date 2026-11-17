@@ -37,6 +37,7 @@ function shopping(root) {
   };
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   root.append(h("div.quick", input, btn("", { kind: "primary", icon: "plus", onclick: add })));
+  root.append(h("div.btnrow", { style: { marginBottom: "12px" } }, btn("Book purchase", { kind: "soft", icon: "wallet", onclick: bookPurchase })));
 
   const all = db.all("shopping");
   const open = all.filter(s => !s.done);
@@ -75,7 +76,7 @@ function shopping(root) {
         db.save("shopping");
         toast(F.plural(removed.length, "item", "items") + " cleared", "Undo", () => { db.all("shopping").push(...removed); db.save("shopping"); });
       } }),
-      btn("Book purchase", { icon: "wallet", onclick: bookPurchase })));
+    ));
   }
 }
 
