@@ -15,7 +15,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.0.1";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -138,8 +138,10 @@ function watchUpdates() {
     if (navigator.onLine) reg.update().catch(() => {});
     state.checkUpdate = () => reg.update();
   }).catch(e => console.warn("offline mode not available:", e));
+  // reload only when a new version takes over - not on the very first start, when the offline copy is just set up
+  const hadController = !!navigator.serviceWorker.controller;
   let reloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloading) { reloading = true; location.reload(); } });
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloading) { reloading = true; location.reload(); } });
 }
 
 export function installUpdate() {
