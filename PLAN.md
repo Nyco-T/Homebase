@@ -45,4 +45,4 @@ for what's due today.
 - [x] 5. Money, Food (shopping, meal plan, recipes), Notes
 - [x] 6. Automation + notifications
 - [x] 7. Test in a phone-sized browser, light + dark
-- [ ] 8. Nico: GitHub account + repo, first push, Settings → Pages on; open on the iPhone, Add to Home Screen, import
+- [x] 8. Nico: GitHub account + repo, first push, Settings → Pages on; open on the iPhone, Add to Home Screen, import
