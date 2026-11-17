@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, sheet, toast, empty } from "../ui.js";
-import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone } from "../kinds.js";
+import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isCorrection } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -121,11 +121,13 @@ function comingUpCard() {
 function moneyCard() {
   const t = F.today();
   const month = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === t.getFullYear() && dd.getMonth() === t.getMonth() && dd <= t; });
-  const income = month.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
-  const spent = -month.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
+  const real = month.filter(x => !isCorrection(x));
+  const income = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
+  const spent = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
+  const bal = month.reduce((a, x) => a + num(x, "amount"), 0);
   const c = card("Money this month", "wallet", "--money", "money");
   c.append(h("div.stats", { style: { marginBottom: "6px" } },
-    h("div", h("div.caps", "Balance"), h("div.v.serif" + (income - spent < 0 ? ".red" : ""), F.signedMoney(income - spent))),
+    h("div", h("div.caps", "Balance"), h("div.v.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal))),
     h("div", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(income))),
     h("div", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(spent)))));
   if (db.all("transactions").length) {

@@ -124,6 +124,9 @@ export function choreDone(r) {
   db.save("chores");
 }
 
+// A balance correction only fixes the balance - it's not income or spending.
+export const isCorrection = r => /correction|korrektur/i.test(r?.category || "");
+
 // Puts an entry into Money (negative = expense).
 export function book(description, amount, category, dateIso, note) {
   const r = { description, amount, category: category || "Other", date: dateIso || F.todayIso() };

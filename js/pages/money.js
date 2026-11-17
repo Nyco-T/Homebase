@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry } from "../kinds.js";
+import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection } from "../kinds.js";
 import { editRecord, newRecord } from "../form.js";
 import { forecast } from "../rules.js";
 import { go } from "../app.js";
@@ -28,8 +28,11 @@ function entries(root) {
   const current = y === t.getFullYear() && m === t.getMonth();
   // an entry booked for a later day (the salary on the 28th) only shows from that day on
   const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m && dd <= t; });
-  const inc = inMonth.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
-  const out = -inMonth.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
+  // a balance correction only fixes the balance - it's not income or spending
+  const real = inMonth.filter(x => !isCorrection(x));
+  const inc = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
+  const out = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
+  const bal = inMonth.reduce((a, x) => a + num(x, "amount"), 0);
 
   // the month and its balance - big, one glance
   const hero = h("div.card", { style: { padding: "12px 16px 14px" } },
@@ -38,7 +41,7 @@ function entries(root) {
       h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m)),
       h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } })),
     h("div.caps", { style: { textAlign: "center" } }, "Balance"),
-    h("div.serif" + (inc - out < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 10px" } }, F.signedMoney(inc - out)),
+    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 10px" } }, F.signedMoney(bal)),
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
       h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
       h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
@@ -48,7 +51,7 @@ function entries(root) {
 
   // where it went: the top 3, the rest on tap
   const cats = {};
-  for (const x of inMonth) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
+  for (const x of real) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   if (top.length) {
     const c = h("div.card", h("div.cardhead", h("h2", "Where it went"), catFilter ? btn("Show all", { kind: "ghost", small: true, onclick: () => { catFilter = null; go("money"); } }) : null));

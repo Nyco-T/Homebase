@@ -36,11 +36,11 @@ export function register() {
       const t = F.today();
       const last = new Date(t.getFullYear(), t.getMonth() - 1, 1);
       const before = new Date(t.getFullYear(), t.getMonth() - 2, 1);
-      const month = db.all("transactions").filter(x => inMonth(x, last.getFullYear(), last.getMonth()));
+      const month = db.all("transactions").filter(x => inMonth(x, last.getFullYear(), last.getMonth()) && !/correction|korrektur/i.test(x.category || ""));
       if (!month.length) return [];
       const sum = (list, pos) => list.map(x => num(x, "amount")).filter(v => pos ? v > 0 : v < 0).reduce((a, b) => a + b, 0);
       const income = sum(month, true), spent = -sum(month, false);
-      const prev = db.all("transactions").filter(x => inMonth(x, before.getFullYear(), before.getMonth()));
+      const prev = db.all("transactions").filter(x => inMonth(x, before.getFullYear(), before.getMonth()) && !/correction|korrektur/i.test(x.category || ""));
       const prevSpent = -sum(prev, false);
       const cats = {};
       for (const x of month) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
