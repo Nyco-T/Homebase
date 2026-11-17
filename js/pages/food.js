@@ -233,16 +233,27 @@ function recipes(root) {
 
 // Paste a recipe from a website or chat: name, time, portions, ingredients and steps are split out by themselves.
 function pasteRecipe() {
-  const text = h("textarea.field", { rows: 9, placeholder: "Paste the whole recipe here - name, ingredients, steps …" });
-  const preview = h("div.small.muted", { style: { marginTop: "8px" } }, "");
+  const text = h("textarea.field", { rows: 7, placeholder: "Paste the whole recipe here - from Chefkoch, a chat, Instagram … Homebase sorts it out." });
+  const preview = h("div", { style: { marginTop: "8px" } });
+  // what Homebase found, before you save it
   const show = () => {
+    preview.innerHTML = "";
+    if (!text.value.trim()) return;
     const r = parseRecipe(text.value);
-    preview.textContent = text.value.trim()
-      ? (r.name || "No name found") + " · " + F.plural(r.ingredients.length, "ingredient", "ingredients") + " · " + F.plural(r.steps.length, "step", "steps") + (r.minutes ? " · " + r.minutes + " min" : "")
-      : "";
+    const facts = [r.minutes ? r.minutes + " min" : "", r.servings ? r.servings + " servings" : ""].filter(Boolean).join(" · ");
+    preview.append(h("div.card", { style: { margin: "0" } },
+      h("div.title", { style: { fontWeight: "700" } }, r.name || "No name found - you can type it after saving"),
+      facts ? h("div.small.muted", facts) : null,
+      h("div.caps", { style: { margin: "8px 0 2px" } }, F.plural(r.ingredients.length, "ingredient", "ingredients")),
+      h("div.small", { style: { whiteSpace: "normal" } }, r.ingredients.length ? r.ingredients.join(" · ") : "none found"),
+      h("div.caps", { style: { margin: "8px 0 2px" } }, F.plural(r.steps.length, "step", "steps")),
+      h("div.small.muted", { style: { whiteSpace: "normal" } }, r.steps.length ? r.steps.slice(0, 2).join(" ") + (r.steps.length > 2 ? " …" : "") : "none found")));
   };
   text.addEventListener("input", show);
-  const s = sheet("Paste a recipe", h("div", text, preview), {
+  const fromClipboard = async () => {
+    try { text.value = await navigator.clipboard.readText(); show(); } catch (e) { toast("Couldn't read the clipboard - long-press the box and Paste"); }
+  };
+  const s = sheet("Paste a recipe", h("div", h("div.btnrow", { style: { marginBottom: "8px" } }, btn("Paste from clipboard", { kind: "soft", small: true, icon: "download", onclick: fromClipboard })), text, preview), {
     actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Save recipe", { kind: "primary", onclick: () => {
       const r = parseRecipe(text.value);
       if (!r.ingredients.length && !r.steps.length) { toast("Nothing to save - paste a recipe first"); return; }
