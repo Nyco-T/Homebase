@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, sheet, toast, empty } from "../ui.js";
-import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isCorrection } from "../kinds.js";
+import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isCorrection, balanceOn } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -125,7 +125,7 @@ function moneyCard() {
   const real = month.filter(x => !isCorrection(x));
   const income = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const spent = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
-  const bal = month.reduce((a, x) => a + num(x, "amount"), 0);
+  const bal = balanceOn(t);   // the total you have, carried over
   const c = card("Money this month", "wallet", "--money", "money");
   c.append(h("div.stats", { style: { marginBottom: "6px" } },
     h("div", h("div.caps", "Balance"), h("div.v.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal))),

@@ -2,8 +2,8 @@
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection } from "../kinds.js";
+import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
+import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance } from "../kinds.js";
 import { editRecord, newRecord } from "../form.js";
 import { forecast } from "../rules.js";
 import { go } from "../app.js";
@@ -32,7 +32,10 @@ function entries(root) {
   const real = inMonth.filter(x => !isCorrection(x));
   const inc = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
-  const bal = inMonth.reduce((a, x) => a + num(x, "amount"), 0);
+  // the total you have, carried over from earlier months (up to today, or the end of an earlier month)
+  const monthEnd = new Date(y, m + 1, 0);
+  const upTo = monthEnd < t ? monthEnd : t;
+  const bal = balanceOn(upTo);
 
   // the month and its balance - big, one glance
   const hero = h("div.card", { style: { padding: "12px 16px 14px" } },
@@ -40,8 +43,9 @@ function entries(root) {
       h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { month = new Date(y, m - 1, 1); catFilter = null; go("money"); } }),
       h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m)),
       h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } })),
-    h("div.caps", { style: { textAlign: "center" } }, "Balance"),
-    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 10px" } }, F.signedMoney(bal)),
+    h("div.caps", { style: { textAlign: "center" } }, current ? "Balance · you have" : "Balance on " + F.date(upTo)),
+    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 0" }, onclick: askBalance }, F.signedMoney(bal)),
+    h("div.small.faint", { style: { textAlign: "center", marginBottom: "10px" }, onclick: askBalance }, "tap to set"),
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
       h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
       h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
@@ -82,6 +86,16 @@ function entries(root) {
     })));
   }
   root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: entrySheet }));
+}
+
+// "Set balance": type what's in your account, the difference becomes a correction (not income or spending).
+async function askBalance() {
+  const now = balanceOn(F.today());
+  const answer = await ask("Set balance", "What's in your account right now?", now.toFixed(2).replace(".", ","), "text");
+  const v = F.parseNumber(answer);
+  if (v == null) return;
+  const diff = setBalance(v);
+  toast(diff === 0 ? "Balance already " + F.money(v) : "Balance set to " + F.money(v) + " (correction " + F.signedMoney(diff) + ")");
 }
 
 function openEntry(x) {

@@ -127,6 +127,24 @@ export function choreDone(r) {
 // A balance correction only fixes the balance - it's not income or spending.
 export const isCorrection = r => /correction|korrektur/i.test(r?.category || "");
 
+// What you have on a day: every entry up to and including it, carried over from month to month.
+export function balanceOn(day) {
+  const end = F.iso(day);
+  return db.all("transactions").filter(x => x.date && x.date <= end).reduce((a, x) => a + num(x, "amount"), 0);
+}
+
+// "Set balance": you say what's really in your account, the difference is booked as today's correction
+// (an existing correction from today is adjusted instead of adding a second one). Returns the difference.
+export function setBalance(target) {
+  const today = F.todayIso();
+  const diff = Math.round((target - balanceOn(F.today())) * 100) / 100;
+  if (Math.abs(diff) < 0.005) return 0;
+  const existing = db.all("transactions").find(x => isCorrection(x) && x.date === today);
+  if (existing) { existing.amount = Math.round((num(existing, "amount") + diff) * 100) / 100; db.touch(existing); db.save("transactions"); }
+  else db.add("transactions", { description: "Balance correction", amount: diff, category: "Correction", date: today, notes: "Set balance to " + F.money(target) });
+  return diff;
+}
+
 // Puts an entry into Money (negative = expense).
 export function book(description, amount, category, dateIso, note) {
   const r = { description, amount, category: category || "Other", date: dateIso || F.todayIso() };
