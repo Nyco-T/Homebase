@@ -72,7 +72,8 @@ function entries(root) {
   }
 
   // every entry, by day
-  const shown = inMonth.filter(x => !catFilter || (x.category || "Other") === catFilter).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
+  // corrections only fix the balance - they aren't listed
+  const shown = inMonth.filter(x => !isCorrection(x) && (!catFilter || (x.category || "Other") === catFilter)).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
   if (!shown.length) root.append(empty("No entries in " + F.monthName(y, m) + " yet. Tap + to add one."));
   const byDay = {};
   for (const x of shown) (byDay[x.date] = byDay[x.date] || []).push(x);
