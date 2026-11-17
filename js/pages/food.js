@@ -245,9 +245,10 @@ function pasteRecipe() {
       h("div.title", { style: { fontWeight: "700" } }, r.name || "No name found - you can type it after saving"),
       facts ? h("div.small.muted", facts) : null,
       h("div.caps", { style: { margin: "8px 0 2px" } }, F.plural(r.ingredients.length, "ingredient", "ingredients")),
-      h("div.small", { style: { whiteSpace: "normal" } }, r.ingredients.length ? r.ingredients.join(" · ") : "none found"),
+      r.ingredients.length ? h("div.small", r.ingredients.map(i => h("div", { style: { padding: "2px 0", whiteSpace: "normal" } }, "• " + i))) : h("div.small.muted", "none found"),
       h("div.caps", { style: { margin: "8px 0 2px" } }, F.plural(r.steps.length, "step", "steps")),
-      h("div.small.muted", { style: { whiteSpace: "normal" } }, r.steps.length ? r.steps.slice(0, 2).join(" ") + (r.steps.length > 2 ? " …" : "") : "none found")));
+      r.steps.length ? h("div.small.muted", r.steps.slice(0, 3).map(s => h("div", { style: { padding: "2px 0", whiteSpace: "normal" } }, s)), r.steps.length > 3 ? h("div", "…") : null)
+        : h("div.small.muted", "none found - check the steps after saving")));
   };
   text.addEventListener("input", show);
   const fromClipboard = async () => {
