@@ -21,6 +21,7 @@ export function render(root, sub) {
 }
 
 let allCats = false;
+let showTotals = false;
 
 function entries(root) {
   const t = F.today();
@@ -49,6 +50,7 @@ function entries(root) {
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
       h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
       h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
+    totalsBlock(),
     current && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
     current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
   root.append(hero);
@@ -86,6 +88,24 @@ function entries(root) {
     })));
   }
   root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: entrySheet }));
+}
+
+// Income and expenses start fresh each month; this button shows them over all time (corrections left out).
+function totalsBlock() {
+  const t = F.today();
+  const all = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd <= t && !isCorrection(x); });
+  const inc = all.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
+  const out = -all.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
+  const box = h("div", { style: { textAlign: "center", marginTop: "10px" } },
+    btn(showTotals ? "Hide totals" : "Show totals", { kind: "ghost", small: true, onclick: () => { showTotals = !showTotals; go("money"); } }));
+  if (showTotals) {
+    const first = all.map(x => x.date).sort()[0];
+    box.append(h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "6px" } },
+      h("div", h("div.caps", "Income total"), h("div.serif.greenc", { style: { fontSize: "17px" } }, F.money(inc))),
+      h("div", h("div.caps", "Expenses total"), h("div.serif.red", { style: { fontSize: "17px" } }, F.money(out)))),
+      first ? h("div.small.faint", { style: { marginTop: "4px" } }, "since " + F.date(F.parseIso(first))) : null);
+  }
+  return box;
 }
 
 // "Set balance": type what's in your account, the difference becomes a correction (not income or spending).
