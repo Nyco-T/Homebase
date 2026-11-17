@@ -95,6 +95,11 @@ function todayCard() {
 export function undoTask(x) {
   x.done = false;
   delete x.doneDate;
+  if (x.refundBooked) {   // take back the "paid back" entry it booked
+    const e = db.byId("transactions", x.refundBooked);
+    if (e) db.remove("transactions", e);
+    delete x.refundBooked;
+  }
   // a repeating task already made its next copy - take that back too
   const list = db.all("tasks");
   const copy = list.findLast?.(r => r !== x && r.title === x.title && !r.done && r.created >= x.updated?.slice(0, 19));

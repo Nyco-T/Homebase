@@ -92,6 +92,11 @@ export function finishTask(r) {
   r.done = true;
   r.doneDate = F.todayIso();
   db.touch(r);
+  // a "get money back" task (from Split) books the money into Money when it's ticked
+  if (num(r, "refund") > 0 && !r.refundBooked) {
+    const e = book((r.refundFrom || "Someone") + " paid back", num(r, "refund"), "Paid back", F.todayIso(), r.refundFor || "");
+    r.refundBooked = e.id;
+  }
   if (r.repeat && r.repeat !== "Never") {
     const again = JSON.parse(JSON.stringify(r));
     delete again.id; delete again.created;
@@ -103,6 +108,13 @@ export function finishTask(r) {
     db.add("tasks", again);
   }
   db.save("tasks");
+}
+
+// Split an expense: you paid it all, someone owes you a part. Makes a task that books the money back when ticked.
+export function splitEntry(entry, who, amount) {
+  return db.add("tasks", { title: "Get " + F.money(amount) + " back from " + who, due: F.iso(F.addDays(F.today(), 7)), priority: "Normal",
+    list: "Money", repeat: "Never", done: false, refund: amount, refundFrom: who, refundFor: entry.description || "",
+    notes: "Split: " + (entry.description || "") + " · " + F.date(d(entry, "date")) + " · you paid " + F.money(Math.abs(num(entry, "amount"))) });
 }
 
 export function choreDone(r) {

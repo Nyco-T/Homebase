@@ -9,6 +9,7 @@ import { editRecord, newRecord } from "../form.js";
 import { isStaple } from "../rules.js";
 import { go } from "../app.js";
 import { match, recentlyBought } from "../cook.js";
+import { parseRecipe } from "../recipeparse.js";
 
 const TABS = ["shopping", "meals", "recipes"];
 const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -207,7 +208,7 @@ function recipes(root) {
   if (db.all("recipes").length) root.append(cookCard());
   const search = h("input.field", { placeholder: "Search recipes", value: recipeSearch, type: "search" });
   search.addEventListener("input", () => { recipeSearch = search.value; drawList(); });
-  root.append(h("div.quick", search));
+  root.append(h("div.quick", search, btn("Paste", { kind: "soft", icon: "download", onclick: pasteRecipe })));
   const listBox = h("div");
   root.append(listBox);
   const drawList = () => {
@@ -222,6 +223,31 @@ function recipes(root) {
   };
   drawList();
   root.append(fab(() => newRecord("recipes")));
+}
+
+// Paste a recipe from a website or chat: name, time, portions, ingredients and steps are split out by themselves.
+function pasteRecipe() {
+  const text = h("textarea.field", { rows: 9, placeholder: "Paste the whole recipe here - name, ingredients, steps …" });
+  const preview = h("div.small.muted", { style: { marginTop: "8px" } }, "");
+  const show = () => {
+    const r = parseRecipe(text.value);
+    preview.textContent = text.value.trim()
+      ? (r.name || "No name found") + " · " + F.plural(r.ingredients.length, "ingredient", "ingredients") + " · " + F.plural(r.steps.length, "step", "steps") + (r.minutes ? " · " + r.minutes + " min" : "")
+      : "";
+  };
+  text.addEventListener("input", show);
+  const s = sheet("Paste a recipe", h("div", text, preview), {
+    actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Save recipe", { kind: "primary", onclick: () => {
+      const r = parseRecipe(text.value);
+      if (!r.ingredients.length && !r.steps.length) { toast("Nothing to save - paste a recipe first"); return; }
+      const rec = db.add("recipes", { name: r.name || "New recipe", ...(r.minutes ? { minutes: r.minutes } : {}), ...(r.servings ? { servings: r.servings } : {}),
+        ingredients: r.ingredients.map(t => ({ text: t, done: false })), steps: r.steps.join("\n"), tags: ["pasted"] });
+      s.close();
+      toast("Saved “" + rec.name + "” - check it once");
+      openRecipe(rec);
+    } })]
+  });
+  setTimeout(() => text.focus(), 250);
 }
 
 function openRecipe(r) {

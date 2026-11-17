@@ -1,9 +1,9 @@
-// Money: the month at a glance, a quick entry, where it went, every entry by day, and repeating entries.
+// Money: the balance big on top, where it went, every entry by day (+ adds one), and repeating entries.
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, btn, seg, toast, empty, section } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names } from "../kinds.js";
+import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog } from "../ui.js";
+import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry } from "../kinds.js";
 import { editRecord, newRecord } from "../form.js";
 import { forecast } from "../rules.js";
 import { go } from "../app.js";
@@ -20,89 +20,124 @@ export function render(root, sub) {
   if (sub === "repeats") repeats(root); else entries(root);
 }
 
+let allCats = false;
+
 function entries(root) {
   const t = F.today();
   const y = month.getFullYear(), m = month.getMonth();
   const current = y === t.getFullYear() && m === t.getMonth();
-  root.append(h("div.head", { style: { margin: "0 0 10px" } },
-    h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { month = new Date(y, m - 1, 1); catFilter = null; go("money"); } }),
-    h("div.serif", { style: { flex: "1", textAlign: "center", fontSize: "20px" } }, F.monthName(y, m)),
-    h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } }),
-    current ? null : btn("Now", { small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
-
   const inMonth = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === y && dd.getMonth() === m; });
   const inc = inMonth.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
   const out = -inMonth.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
-  root.append(h("div.stats",
-    h("div.stat", h("div.caps", "Balance"), h("div.v.serif" + (inc - out < 0 ? ".red" : ""), F.signedMoney(inc - out))),
-    h("div.stat", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(inc))),
-    h("div.stat", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(out)))));
-  if (current && db.all("transactions").length) {
-    const f = forecast();
-    root.append(h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { margin: "-4px 2px 12px" } },
-      "Month end ≈ " + F.signedMoney(f.end) + " · still to come " + F.signedMoney(f.coming) + (f.rest ? " · everyday ≈ " + F.signedMoney(f.rest) : "")));
-  }
 
-  root.append(quickEntry());
+  // the month and its balance - big, one glance
+  const hero = h("div.card", { style: { padding: "12px 16px 14px" } },
+    h("div", { style: { display: "flex", alignItems: "center", marginBottom: "6px" } },
+      h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { month = new Date(y, m - 1, 1); catFilter = null; go("money"); } }),
+      h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m)),
+      h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } })),
+    h("div.caps", { style: { textAlign: "center" } }, "Balance"),
+    h("div.serif" + (inc - out < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 10px" } }, F.signedMoney(inc - out)),
+    h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
+      h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
+      h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
+    current && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
+    current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
+  root.append(hero);
 
-  // where it went
+  // where it went: the top 3, the rest on tap
   const cats = {};
   for (const x of inMonth) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   if (top.length) {
     const c = h("div.card", h("div.cardhead", h("h2", "Where it went"), catFilter ? btn("Show all", { kind: "ghost", small: true, onclick: () => { catFilter = null; go("money"); } }) : null));
     const max = top[0][1];
-    for (const [name, v] of top.slice(0, 7)) {
-      c.append(h("div", { style: { padding: "6px 0", opacity: catFilter && catFilter !== name ? ".45" : "1" }, onclick: () => { catFilter = catFilter === name ? null : name; go("money"); } },
-        h("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "14px", marginBottom: "4px" } }, h("span", name), h("span.muted", F.money(v) + " · " + F.percent(v / out))),
-        h("div.bar", h("span", { style: { width: Math.max(3, v / max * 100) + "%" } }))));
+    for (const [name, v] of top.slice(0, allCats ? top.length : 3)) {
+      c.append(h("div", { style: { padding: "5px 0", opacity: catFilter && catFilter !== name ? ".45" : "1" }, onclick: () => { catFilter = catFilter === name ? null : name; go("money"); } },
+        h("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "14.5px", marginBottom: "4px" } }, h("span", name), h("span.muted", F.money(v))),
+        h("div.bar", h("span", { style: { width: Math.max(3, v / max * 100) + "%", background: "var(--red)", opacity: ".75" } }))));
     }
+    if (top.length > 3) c.append(h("button.btn.ghost.small", { style: { marginTop: "4px" }, onclick: () => { allCats = !allCats; go("money"); } }, allCats ? "Show less" : "+ " + (top.length - 3) + " more categories"));
     root.append(c);
   }
 
   // every entry, by day
   const shown = inMonth.filter(x => !catFilter || (x.category || "Other") === catFilter).sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
-  if (!shown.length) { root.append(empty("No entries in " + F.monthName(y, m) + " yet.")); return; }
+  if (!shown.length) root.append(empty("No entries in " + F.monthName(y, m) + " yet. Tap + to add one."));
   const byDay = {};
   for (const x of shown) (byDay[x.date] = byDay[x.date] || []).push(x);
   for (const [day, list] of Object.entries(byDay)) {
     const dd = F.parseIso(day);
     const total = list.reduce((a, x) => a + num(x, "amount"), 0);
-    root.append(section((dd.getTime() === t.getTime() ? "Today · " : "") + F.dayDate(dd), F.signedMoney(total)));
+    root.append(section((dd.getTime() === t.getTime() ? "Today · " : dd > t ? "Coming · " : "") + F.dayDate(dd), F.signedMoney(total)));
     root.append(h("div.list", list.map(x => {
       const a = num(x, "amount");
-      return h("div.row", { onclick: () => editRecord("transactions", x) },
-        h("span.tile", { style: { background: "var(--card2)", color: "var(--muted)", fontWeight: "700", fontSize: "14px" } }, (x.category || "?").slice(0, 1).toUpperCase()),
+      return h("div.row", { onclick: () => openEntry(x) },
         h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (x.repeat ? " · repeating" : ""))),
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     })));
   }
+  root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: entrySheet }));
 }
 
-function quickEntry() {
-  const amount = h("input.field", { inputmode: "decimal", placeholder: "0,00", style: { flex: "0 0 100px" } });
-  const what = h("input.field", { placeholder: income ? "Salary, gift …" : "What for?" });
-  const listId = "money-cats";
-  const cat = h("input.field", { list: listId, placeholder: "Category" });
+function openEntry(x) {
+  const actions = num(x, "amount") < 0 ? [{ label: "Split", icon: "repeat", run: splitDialog }] : [];
+  editRecord("transactions", x, { actions });
+}
+
+// You paid for someone: who, and how much do they owe you? (half by default)
+async function splitDialog(entry) {
+  const total = Math.abs(num(entry, "amount"));
+  const who = h("input.field", { placeholder: "Name", list: "split-people" });
+  const amount = h("input.field", { inputmode: "decimal", value: (total / 2).toFixed(2).replace(".", ",") });
+  const people = [...new Set(db.all("tasks").filter(t => t.refundFrom).map(t => t.refundFrom))];
+  const body = h("div", h("div.muted.small", (entry.description || "") + " · you paid " + F.money(total)),
+    h("div.grid2", h("label", h("span.label.caps", "Who owes you"), who), h("label", h("span.label.caps", "How much"), amount)),
+    h("datalist", { id: "split-people" }, people.map(p => h("option", { value: p }))),
+    h("div.small.faint", { style: { marginTop: "8px" } }, "You get a task \"Get … back\". Tick it when the money is there - it's booked into Money by itself."));
+  const ok = await dialog("Split " + (entry.description || "entry"), body, [{ label: "Cancel", value: false }, { label: "Split", value: true, main: true }]);
+  if (!ok) return;
+  const v = F.parseNumber(amount.value);
+  if (!who.value.trim() || v == null || v <= 0) { toast("Name and amount, please"); return; }
+  splitEntry(entry, who.value.trim(), v);
+  toast("Task: get " + F.money(v) + " back from " + who.value.trim());
+}
+
+// New entry in a sheet: Expense / Income, amount, what, category (guessed), date.
+function entrySheet() {
+  let isIncome = income;
+  const amount = h("input.field", { inputmode: "decimal", placeholder: "0,00", style: { fontSize: "28px", textAlign: "center", padding: "12px" } });
+  const what = h("input.field", { placeholder: "What for?" });
+  const cat = h("input.field", { list: "money-cats", placeholder: "Category" });
+  const day = h("input.field", { type: "date", value: F.todayIso() });
   let picked = false;
   cat.addEventListener("input", () => { picked = !!cat.value; });
   what.addEventListener("input", () => { if (!picked) cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; });
-  const toggle = h("div.seg", { style: { marginBottom: "8px" } },
-    h("button" + (!income ? ".on" : ""), { onclick: () => { income = false; go("money"); } }, "Expense"),
-    h("button" + (income ? ".on" : ""), { onclick: () => { income = true; go("money"); } }, "Income"));
+  const toggle = h("div.seg");
+  const drawToggle = () => {
+    toggle.innerHTML = "";
+    toggle.append(h("button" + (!isIncome ? ".on" : ""), { onclick: () => { isIncome = false; drawToggle(); } }, "Expense"),
+      h("button" + (isIncome ? ".on" : ""), { onclick: () => { isIncome = true; drawToggle(); } }, "Income"));
+  };
+  drawToggle();
   const add = () => {
     const v = F.parseNumber(amount.value);
     if (v == null || v <= 0) { amount.focus(); toast("Type the amount first"); return; }
-    const desc = what.value.trim() || (income ? "Income" : "Expense");
-    const c = cat.value.trim() || guessCategory(desc).replace(/^Other$/, income ? "Income" : "Other");
-    db.add("transactions", { description: desc, amount: income ? v : -v, category: c, date: F.todayIso() });
-    toast((income ? "Income " : "Expense ") + F.money(v) + " · " + desc, "Undo", () => { const list = db.all("transactions"); const r = list[list.length - 1]; if (r && r.description === desc) db.remove("transactions", r); });
+    const desc = what.value.trim() || (isIncome ? "Income" : "Expense");
+    const c = cat.value.trim() || guessCategory(desc).replace(/^Other$/, isIncome ? "Income" : "Other");
+    const e = db.add("transactions", { description: desc, amount: isIncome ? v : -v, category: c, date: day.value || F.todayIso() });
+    income = isIncome;
+    s.close();
+    toast((isIncome ? "Income " : "Expense ") + F.money(v) + " · " + desc, "Undo", () => db.remove("transactions", e));
   };
   for (const el of [amount, what, cat]) el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
-  return h("div.card", toggle,
-    h("div", { style: { display: "flex", gap: "8px", marginBottom: "8px" } }, amount, what),
-    h("div", { style: { display: "flex", gap: "8px" } }, cat, btn("Add", { kind: "primary", onclick: add })),
-    h("datalist", { id: listId }, names("transactions", "category").map(c => h("option", { value: c }))));
+  const s = sheet("New entry", h("div", toggle, amount,
+    h("label", h("span.label.caps", "What for"), what),
+    h("div.grid2", h("label", h("span.label.caps", "Category"), cat), h("label", h("span.label.caps", "Date"), day)),
+    h("datalist", { id: "money-cats" }, names("transactions", "category").map(c => h("option", { value: c })))), {
+    actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Add", { kind: "primary", icon: "plus", onclick: add })]
+  });
+  setTimeout(() => amount.focus(), 250);
 }
 
 function repeats(root) {
