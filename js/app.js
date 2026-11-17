@@ -16,7 +16,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.0.20";
+export const VERSION = "1.1.0";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -45,12 +45,16 @@ export function openItem(item) {
 }
 
 let scrollMemory = {};
+let shownKey = null;
 export function render() {
   const { tab, sub } = route();
   const page = document.getElementById("page");
   const key = location.hash;
   page.innerHTML = "";
   PAGES[tab].render(page, sub);
+  // a new page slides in softly - a redraw after a change on the same page doesn't
+  if (shownKey !== null && key !== shownKey) { page.classList.remove("enter"); void page.offsetWidth; page.classList.add("enter"); }
+  shownKey = key;
   window.scrollTo(0, scrollMemory[key] || 0);
   drawTabs(tab);
 }

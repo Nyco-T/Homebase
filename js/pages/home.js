@@ -2,7 +2,7 @@
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, tickBox, btn, sheet, toast, empty } from "../ui.js";
+import { h, icon, tile, tickBox, btn, sheet, toast, empty, confetti } from "../ui.js";
 import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isCorrection, balanceOn } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
@@ -84,13 +84,23 @@ function todayCard() {
   for (const e of events) c.append(row(tile(e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", "--today"), e.title, [e.time, e.place].filter(Boolean).join(" · ") || "today", null, () => openItem({ kind: "events", id: e.id })));
   for (const x of tasks.slice(0, 6)) {
     const due = d(x, "due");
-    c.append(row(tickBox(false, () => { finishTask(x); toast("Done: " + x.title, "Undo", () => undoTask(x)); }), x.title, x.list || "",
+    c.append(row(tickBox(false, () => { finishTask(x); cheerIfClear("Done: " + x.title, () => undoTask(x)); }), x.title, x.list || "",
       h("span.small" + (due < t ? ".red" : ".muted"), F.relative(due)), () => openItem({ kind: "tasks", id: x.id })));
   }
   for (const x of chores) c.append(row(tile("sparkle", "--home"), x.name, (x.area || "") + " · due " + F.relative(nextChore(x)),
-    btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); toast(x.name + " done"); } }), () => openItem({ kind: "chores", id: x.id })));
+    btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); cheerIfClear(x.name + " done"); } }), () => openItem({ kind: "chores", id: x.id })));
   if (!tasks.length && !events.length && !chores.length) c.append(h("div.small.muted", "Nothing for today. Type “todo call mum fri” above to plan something."));
   return c;
+}
+
+// Nothing left for today (tasks due today or earlier, chores due)?
+export function todayClear() {
+  const t = F.today();
+  return !db.all("tasks").some(x => !isOn(x, "done") && d(x, "due") && d(x, "due") <= t) && !db.all("chores").some(x => nextChore(x) <= t);
+}
+// After ticking something off: confetti when it was the last thing for today.
+export function cheerIfClear(text, undo) {
+  if (todayClear()) { confetti(); toast("All done for today 🎉", undo ? "Undo" : null, undo); } else if (text) toast(text, undo ? "Undo" : null, undo);
 }
 
 export function undoTask(x) {

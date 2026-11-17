@@ -59,10 +59,43 @@ export function tile(name, colorVar = "--accent") {
   return h("span.tile", { html: icon(name, 19), style: { background: `color-mix(in srgb, var(${colorVar}) 20%, transparent)`, color: `var(${colorVar})` } });
 }
 
+export const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// The round tick: ticking it pops (a short bounce with the check), then the list moves on.
 export function tickBox(on, onToggle) {
   const b = h("button.tick" + (on ? ".on" : ""), { "aria-label": on ? "Done" : "Mark done", html: on ? icon("tick", 15) : "" });
-  b.addEventListener("click", e => { e.stopPropagation(); onToggle(); });
+  let busy = false;
+  b.addEventListener("click", e => {
+    e.stopPropagation();
+    if (busy) return;
+    if (on || calm()) { onToggle(); return; }
+    busy = true;
+    b.classList.add("on", "pop");
+    b.innerHTML = icon("tick", 15);
+    b.closest(".row")?.classList.add("ticked");
+    setTimeout(onToggle, 260);
+  });
   return b;
+}
+
+// A short burst of confetti - for "everything done for today".
+export function confetti() {
+  if (calm()) return;
+  const colors = ["var(--accent)", "var(--today)", "var(--home)", "var(--notes)", "var(--blue)", "var(--warn)"];
+  const box = h("div.confetti");
+  for (let i = 0; i < 42; i++) {
+    const piece = h("i");
+    piece.style.left = Math.random() * 100 + "vw";
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = Math.random() * 0.25 + "s";
+    piece.style.animationDuration = 1.1 + Math.random() * 0.8 + "s";
+    piece.style.setProperty("--dx", (Math.random() * 120 - 60) + "px");
+    piece.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg");
+    if (i % 3 === 0) piece.style.borderRadius = "50%";
+    box.append(piece);
+  }
+  document.body.append(box);
+  setTimeout(() => box.remove(), 2400);
 }
 
 export function switchEl(on, onChange) {

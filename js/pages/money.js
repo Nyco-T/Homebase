@@ -4,8 +4,9 @@ import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
 import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat } from "../kinds.js";
-import { editRecord, newRecord, calcField } from "../form.js";
+import { editRecord, newRecord, calcField, choiceChips, usedMost } from "../form.js";
 import { forecast } from "../rules.js";
+import { catStyle } from "../cats.js";
 import { go } from "../app.js";
 
 let month = null;
@@ -56,19 +57,22 @@ function entries(root) {
   root.append(hero);
   if (current) { const w = waitingBlock(); if (w) root.append(w); const f = favouritesRow(); if (f) root.append(f); }
 
-  // where it went: the top 3, the rest on tap
+  // where it went: a ring with the categories in their colours, the list next to it - tap one to see only its entries
   const cats = {};
   for (const x of real) if (num(x, "amount") < 0) cats[x.category || "Other"] = (cats[x.category || "Other"] || 0) - num(x, "amount");
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   if (top.length) {
     const c = h("div.card", h("div.cardhead", h("h2", "Where it went"), catFilter ? btn("Show all", { kind: "ghost", small: true, onclick: () => { catFilter = null; go("money"); } }) : null));
-    const max = top[0][1];
-    for (const [name, v] of top.slice(0, allCats ? top.length : 3)) {
-      c.append(h("div", { style: { padding: "5px 0", opacity: catFilter && catFilter !== name ? ".45" : "1" }, onclick: () => { catFilter = catFilter === name ? null : name; go("money"); } },
-        h("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "14.5px", marginBottom: "4px" } }, h("span", name), h("span.muted", F.money(v))),
-        h("div.bar", h("span", { style: { width: Math.max(3, v / max * 100) + "%", background: "var(--red)", opacity: ".75" } }))));
-    }
-    if (top.length > 3) c.append(h("button.btn.ghost.small", { style: { marginTop: "4px" }, onclick: () => { allCats = !allCats; go("money"); } }, allCats ? "Show less" : "+ " + (top.length - 3) + " more categories"));
+    const shownCats = top.slice(0, allCats ? top.length : 4);
+    const legend = h("div.legend", shownCats.map(([name, v]) => {
+      const st = catStyle(name);
+      return h("div.lrow" + (catFilter && catFilter !== name ? ".dim" : ""), { onclick: () => { catFilter = catFilter === name ? null : name; go("money"); } },
+        h("span.ldot", { style: { background: st.color } }),
+        h("span.lname", st.emoji + " " + name),
+        h("span.lval", F.money(v)), h("span.lpct", Math.round(v / out * 100) + " %"));
+    }));
+    c.append(h("div.where", donut(top, out), legend));
+    if (top.length > 4) c.append(h("button.btn.ghost.small", { style: { marginTop: "4px" }, onclick: () => { allCats = !allCats; go("money"); } }, allCats ? "Show less" : "+ " + (top.length - 4) + " more categories"));
     root.append(c);
   }
 
@@ -84,12 +88,44 @@ function entries(root) {
     root.append(section((dd.getTime() === t.getTime() ? "Today · " : "") + F.dayDate(dd), F.signedMoney(total)));
     root.append(h("div.list", list.map(x => {
       const a = num(x, "amount");
-      return h("div.row", { onclick: () => openEntry(x) },
+      return h("div.row", { onclick: () => openEntry(x) }, catTile(x.category),
         h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (x.repeat ? " · repeating" : ""))),
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     })));
   }
   root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: () => entrySheet() }));
+}
+
+// A category's emoji in a soft circle of its colour.
+function catTile(category) {
+  const st = catStyle(category);
+  return h("span.tile.cat", { style: { background: `color-mix(in srgb, ${st.color} 22%, transparent)` } }, st.emoji);
+}
+
+// The ring: one arc per category (small ones together as "Rest"), the month's spending in the middle.
+function donut(top, total) {
+  const R = 46, C = 2 * Math.PI * R, GAP = top.length > 1 ? 2 : 0;
+  const parts = top.slice(0, 6);
+  if (top.length > 6) parts.push(["Rest", top.slice(6).reduce((a, [, v]) => a + v, 0)]);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 120 120");
+  svg.setAttribute("class", "donut");
+  const ring = (color, len, offset, faded) => {
+    const el = document.createElementNS(ns, "circle");
+    for (const [k, v] of Object.entries({ cx: 60, cy: 60, r: R, fill: "none", stroke: color, "stroke-width": 14,
+      "stroke-dasharray": Math.max(0.5, len - GAP) + " " + C, "stroke-dashoffset": -offset, transform: "rotate(-90 60 60)", "stroke-linecap": "butt" })) el.setAttribute(k, v);
+    if (faded) el.setAttribute("opacity", ".25");
+    return el;
+  };
+  svg.append(ring("var(--track)", C + GAP, 0, false));
+  let at = 0;
+  for (const [name, v] of parts) {
+    const len = v / total * C;
+    svg.append(ring(name === "Rest" ? "var(--faint)" : catStyle(name).color, len, at, catFilter && catFilter !== name));
+    at += len;
+  }
+  return h("div.donutbox", svg, h("div.donutmid", h("div.serif", F.moneyShort(total)), h("div.caps", "spent")));
 }
 
 // Income and expenses start fresh each month; this button shows them over all time (corrections left out).
@@ -168,7 +204,7 @@ export function favourites(max = 6) {
   return out.sort((a, b) => b.count - a.count || b.lastDate.localeCompare(a.lastDate)).slice(0, max);
 }
 
-const favLabel = f => f.description + " " + (f.fixed ? F.money(Math.abs(f.amount)) : "…");
+const favLabel = f => catStyle(f.category).emoji + " " + f.description + " " + (f.fixed ? F.money(Math.abs(f.amount)) : "…");
 
 function bookFavourite(f) {
   if (!f.fixed) return entrySheet(f);
@@ -194,19 +230,27 @@ function entrySheet(preset) {
   const day = h("input.field", { type: "date", value: F.todayIso() });
   let picked = false;
   const fill = f => {
-    what.value = f.description; cat.value = f.category || ""; picked = !!cat.value;
+    what.value = f.description; cat.value = f.category || ""; picked = !!cat.value; chips && chips.redraw();
     isIncome = f.amount > 0; drawToggle();
     amount.value = f.fixed ? F.plainAmount(Math.abs(f.amount)) : "";
     amount.dispatchEvent(new Event("input"));
     setTimeout(() => amount.focus(), 50);
   };
   cat.addEventListener("input", () => { picked = !!cat.value; });
-  what.addEventListener("input", () => { if (!picked) cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; });
+  // your categories as buttons, most used first (expenses and income kept apart)
+  const DEFAULTS = { true: ["Income"], false: ["Groceries", "Eating out", "Transport", "Fun", "Clothes", "Other"] };
+  const catsFor = inc => usedMost("transactions", "category", DEFAULTS[inc], 40)
+    .filter(c => DEFAULTS[inc].includes(c) || db.all("transactions").some(x => x.category === c && (num(x, "amount") > 0) === inc)).slice(0, 14);
+  const catBox = h("div");
+  let chips = null;
+  const drawCats = () => { catBox.innerHTML = ""; chips = choiceChips(cat, catsFor(isIncome), c => catStyle(c).emoji + " " + c); catBox.append(chips); };
+  what.addEventListener("input", () => { if (!picked) { cat.value = what.value ? guessCategory(what.value).replace(/^Other$/, "") : ""; chips && chips.redraw(); } });
   const toggle = h("div.seg");
   const drawToggle = () => {
     toggle.innerHTML = "";
     toggle.append(h("button" + (!isIncome ? ".on" : ""), { onclick: () => { isIncome = false; drawToggle(); } }, "Expense"),
       h("button" + (isIncome ? ".on" : ""), { onclick: () => { isIncome = true; drawToggle(); } }, "Income"));
+    drawCats();
   };
   drawToggle();
   const favs = favourites(8);
@@ -225,7 +269,8 @@ function entrySheet(preset) {
   for (const el of [amount, what, cat]) el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
   const s = sheet("New entry", h("div", toggle, favBox, calcField(amount),
     h("label", h("span.label.caps", "What for"), what),
-    h("div.grid2", h("label", h("span.label.caps", "Category"), cat), h("label", h("span.label.caps", "Date"), day)),
+    h("label", h("span.label.caps", "Category"), cat), catBox,
+    h("label", h("span.label.caps", "Date"), day),
     h("datalist", { id: "money-cats" }, names("transactions", "category").map(c => h("option", { value: c })))), {
     actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), btn("Add", { kind: "primary", icon: "plus", onclick: add })]
   });

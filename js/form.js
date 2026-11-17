@@ -5,6 +5,7 @@ import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { KINDS, titleOf, names } from "./kinds.js";
 import { h, sheet, btn, switchEl, tickBox, toast, icon } from "./ui.js";
+import { catStyle } from "./cats.js";
 
 // editRecord("tasks", rec, { isNew, actions: [{label, icon, run}], top: element shown under the title })
 export function editRecord(kind, rec, opts = {}) {
@@ -83,6 +84,38 @@ export function calcField(input, onResult) {
     opBtn("+", "+"), opBtn("−", "-"), opBtn("×", "*"), opBtn("÷", "/"), h("div.grow", { style: { flex: "1" } }), result));
 }
 
+// What you've used in a field, most used first (then the built-in choices): your saved categories, shops, lists …
+export function usedMost(kind, key, extra = [], max = 12) {
+  const count = new Map();
+  for (const r of db.all(kind)) {
+    const v = (r[key] || "").trim();
+    if (v && !/correction|korrektur/i.test(v)) count.set(v, (count.get(v) || 0) + 1);
+  }
+  const out = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+  for (const c of extra) if (!out.some(o => o.toLowerCase() === c.toLowerCase())) out.push(c);
+  return out.slice(0, max);
+}
+
+// Those choices as buttons under a field - tap one to pick it (you can still type a new one).
+// box.redraw() after the field was changed by code.
+export function choiceChips(input, options, label = o => o) {
+  const box = h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } });
+  const draw = () => {
+    box.innerHTML = "";
+    const now = input.value.trim().toLowerCase();
+    for (const o of options) {
+      box.append(h("button.chip" + (now === o.toLowerCase() ? ".on" : ""), { type: "button", onpointerdown: e => e.preventDefault(),
+        onclick: () => { input.value = input.value.trim().toLowerCase() === o.toLowerCase() ? "" : o; input.dispatchEvent(new Event("input")); } }, label(o)));
+    }
+  };
+  input.addEventListener("input", draw);
+  draw();
+  box.redraw = draw;
+  if (!options.length) box.style.display = "none";
+  return box;
+}
+const catLabel = c => catStyle(c).emoji + " " + c;
+
 function fieldEditor(kind, rec, f, set, changed) {
   switch (f.type) {
     case "long": {
@@ -116,7 +149,9 @@ function fieldEditor(kind, rec, f, set, changed) {
       const options = [...new Set([...(f.choices || []), ...names(kind, f.key)])];
       const i = h("input.field", { list: listId, value: rec[f.key] || "", placeholder: "type or pick" });
       i.addEventListener("input", () => set(f.key, i.value.trim() || null));
-      return labeled(f.label, h("div", i, h("datalist", { id: listId }, options.map(o => h("option", { value: o })))));
+      const money = kind === "transactions" || kind === "repeats";
+      const chips = choiceChips(i, usedMost(kind, f.key, f.choices || [], money ? 14 : 10), money && f.key === "category" ? catLabel : o => o);
+      return labeled(f.label, h("div", i, h("datalist", { id: listId }, options.map(o => h("option", { value: o }))), chips));
     }
     case "bool": {
       const row = h("div.row", { style: { borderBottom: "0", padding: "6px 0" } }, h("div.grow", f.label), switchEl(rec[f.key] === true, on => set(f.key, on)));

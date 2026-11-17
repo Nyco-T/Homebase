@@ -195,3 +195,37 @@ textarea.field { min-height: 92px; resize: vertical; }
 .dial button.at { background: var(--accent); color: var(--on-accent); }
 
 .hidden { display: none !important; }
+
+/* money: category tiles and the "where it went" ring */
+.tile.cat { font-size: 17px; line-height: 1; }
+.where { display: flex; align-items: center; gap: 14px; }
+.donutbox { position: relative; width: 118px; height: 118px; flex: none; }
+.donut { width: 100%; height: 100%; display: block; }
+.donutmid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.donutmid .serif { font-size: 17px; }
+.donutmid .caps { font-size: 10px; }
+.legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lrow { display: grid; grid-template-columns: 10px 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; }
+.lrow.dim { opacity: .4; }
+.ldot { width: 10px; height: 10px; border-radius: 50%; grid-row: 1 / span 2; }
+.lname { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lval { font-size: 13.5px; text-align: right; }
+.lpct { grid-column: 2 / span 2; font-size: 11.5px; color: var(--muted); }
+
+/* movement: pages slide in, ticks pop, the ring turns in, confetti when today is done */
+@keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+#page.enter { animation: pageIn .24s ease-out; }
+@keyframes tickPop { 0% { transform: scale(.8); } 45% { transform: scale(1.28); } 100% { transform: scale(1); } }
+.tick.pop { animation: tickPop .28s cubic-bezier(.3,1.6,.5,1); }
+.row.ticked .title { color: var(--faint); text-decoration: line-through; transition: color .2s; }
+@keyframes donutIn { from { transform: rotate(-40deg) scale(.86); opacity: 0; } to { transform: none; opacity: 1; } }
+#page.enter .donut { animation: donutIn .5s ease-out; }
+.row, .chip, .btn, .card .cardhead { transition: transform .12s, background-color .15s; }
+.row:active { background: color-mix(in srgb, var(--hover) 70%, transparent); }
+.chip:active { transform: scale(.95); }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 100; overflow: hidden; }
+.confetti i { position: absolute; top: -14px; width: 8px; height: 13px; border-radius: 2px; opacity: .95; animation: confettiFall 1.5s ease-in forwards; }
+@keyframes confettiFall { to { transform: translate(var(--dx), 105vh) rotate(var(--rot)); opacity: .8; } }
+@media (prefers-reduced-motion: reduce) {
+  #page.enter, .tick.pop, #page.enter .donut { animation: none; }
+}

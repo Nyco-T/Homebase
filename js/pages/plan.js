@@ -8,7 +8,7 @@ import { quickAdd } from "../quick.js";
 import { editRecord, newRecord } from "../form.js";
 import * as reminders from "../reminders.js";
 import { go, openItem } from "../app.js";
-import { undoTask } from "./home.js";
+import { undoTask, todayClear, cheerIfClear } from "./home.js";
 import * as phonecal from "../phonecal.js";
 
 const TABS = ["tasks", "calendar", "chores"];
@@ -92,8 +92,9 @@ function taskRow(x) {
   return h("div.row", { onclick: () => editRecord("tasks", x, { actions: done ? [] : [{ label: "Mark done", icon: "tick", run: r => { finishTask(r); toast("Done: " + r.title, "Undo", () => undoTask(r)); } }] }) },
     tickBox(done, () => {
       if (done) { undoTask(x); return; }
+      const wasToday = d(x, "due") && d(x, "due") <= F.today();
       finishTask(x);
-      toast("Done: " + x.title, "Undo", () => undoTask(x));
+      if (wasToday) cheerIfClear("Done: " + x.title, () => undoTask(x)); else toast("Done: " + x.title, "Undo", () => undoTask(x));
     }),
     h("div.grow", h("div.title" + (done ? ".done" : ""), (x.priority === "High" && !done ? "! " : "") + x.title), meta ? h("div.meta", meta) : null),
     due && !done ? h("span.small" + (due < t ? ".red" : ".muted"), F.relative(due)) : null);
@@ -183,6 +184,6 @@ function choreRow(x) {
   return h("div.row", { onclick: () => editRecord("chores", x, { actions: [{ label: "Done today", icon: "tick", run: r => { choreDone(r); toast(r.name + " done"); } }] }) },
     tile("sparkle", "--home"),
     h("div.grow", h("div.title", x.name), h("div.meta", [x.area, "every " + (num(x, "every") || 7) + " days", x.lastDone ? "last " + F.relative(d(x, "lastDone")) : ""].filter(Boolean).join(" · "))),
-    due ? btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); toast(x.name + " done - next " + F.relative(nextChore(x))); } })
+    due ? btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); cheerIfClear(x.name + " done - next " + F.relative(nextChore(x))); } })
       : h("span.small.muted", F.relative(next)));
 }
