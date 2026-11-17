@@ -172,29 +172,96 @@ export function names(kind, key) {
   return [...out].sort((a, b) => a.localeCompare(b));
 }
 
-// Repeating entries (rent, salary): every month since "lastAdded" that's due gets its entry.
-export function addMissingRepeats() {
+// Repeating entries (rent, salary): every month since "lastAdded" that's due. With "Ask before booking" on (the default)
+// an entry isn't booked until you say it really came / was paid ("Did your salary arrive?"); off = booked on its day.
+export const confirmRepeatsOn = () => db.setting("rule.money.confirm-repeats", true) !== false;
+
+// The months of a repeat that are due by today and not booked yet, oldest first: [{ key: "2026-11", day: Date }]
+function dueMonths(rule) {
   const t = F.today();
   const now = F.monthKey(t);
+  const out = [];
+  let [y, m] = (rule.lastAdded || F.monthKey(F.addMonths(t, -1))).split("-").map(Number);
+  for (let guard = 0; guard < 36; guard++) {
+    m++; if (m > 12) { m = 1; y++; }
+    const key = y + "-" + String(m).padStart(2, "0");
+    if (key > now) break;
+    const day = new Date(y, m - 1, Math.max(1, Math.min(num(rule, "day") || 1, F.daysInMonth(y, m - 1))));
+    if (day > t) break;
+    out.push({ key, day });
+  }
+  return out;
+}
+
+// Already booked by hand that month (same text and amount)? Then it counts as done - no second entry, no question.
+// (an entry from the repeat itself counts for the month it belongs to - a late salary booked on 2.12. is still November's)
+export const repeatMonthOf = x => x.repeatMonth || (x.date || "").slice(0, 7);
+export const bookedByHand = (rule, key) => db.all("transactions").some(x => x.repeat === rule.id ? repeatMonthOf(x) === key
+  : (x.date || "").startsWith(key) && (x.description || "").toLowerCase() === (rule.description || "").toLowerCase() && Math.abs(num(x, "amount") - num(rule, "amount")) < 0.01);
+
+function bookRepeat(rule, key, dateIso, amount) {
+  const e = { id: db.newId(), created: db.stamp(), updated: db.stamp(), description: rule.description, amount,
+    category: rule.category || "Other", date: dateIso, repeat: rule.id, repeatMonth: key };
+  db.all("transactions").push(e);
+  rule.lastAdded = key;
+  delete rule.notYet;
+  db.touch(rule);
+  return e;
+}
+
+export function addMissingRepeats() {
   let changed = false;
   for (const rule of db.all("repeats")) {
     if (isOn(rule, "paused")) continue;
-    let [y, m] = (rule.lastAdded || F.monthKey(F.addMonths(t, -1))).split("-").map(Number);
-    for (let guard = 0; guard < 36; guard++) {
-      m++; if (m > 12) { m = 1; y++; }
-      const key = y + "-" + String(m).padStart(2, "0");
-      if (key > now) break;
-      const day = new Date(y, m - 1, Math.max(1, Math.min(num(rule, "day") || 1, F.daysInMonth(y, m - 1))));
-      if (day > t) break;
-      const e = { id: db.newId(), created: db.stamp(), updated: db.stamp(), description: rule.description, amount: num(rule, "amount"),
-        category: rule.category || "Other", date: F.iso(day), repeat: rule.id };
-      db.all("transactions").push(e);
-      rule.lastAdded = key;
-      db.touch(rule);
+    for (const { key, day } of dueMonths(rule)) {
+      if (bookedByHand(rule, key)) { rule.lastAdded = key; db.touch(rule); changed = true; continue; }
+      if (confirmRepeatsOn()) break;   // waits for your yes
+      bookRepeat(rule, key, F.iso(day), num(rule, "amount"));
       changed = true;
     }
   }
   if (changed) { db.save("transactions"); db.save("repeats"); }
+}
+
+// What waits for your yes: per repeat the oldest month that's due and not booked.
+// late = you said "not yet" on an earlier day, so a yes books it on the day you confirm (when it really came).
+export function waitingRepeats() {
+  if (!confirmRepeatsOn()) return [];
+  const today = F.todayIso();
+  const out = [];
+  for (const rule of db.all("repeats")) {
+    if (isOn(rule, "paused")) continue;
+    const first = dueMonths(rule).find(x => !bookedByHand(rule, x.key));
+    if (!first) continue;
+    const said = (rule.notYet || "").split("@");
+    const notYetFor = said[0] === first.key ? said[1] : "";
+    out.push({ rule, key: first.key, day: first.day, late: !!notYetFor && notYetFor < today, askedToday: notYetFor === today });
+  }
+  return out.sort((a, b) => a.day - b.day);
+}
+
+export const waitQuestion = w => num(w.rule, "amount") > 0 ? "Did " + w.rule.description + " arrive?" : "Was " + w.rule.description + " paid?";
+
+// Yes: book it (on its day, or today when it came late). Returns what undoRepeat needs.
+export function confirmRepeat(w, amount) {
+  const prev = w.rule.lastAdded;
+  const notYet = w.rule.notYet;
+  const e = bookRepeat(w.rule, w.key, w.late ? F.todayIso() : F.iso(w.day), amount ?? num(w.rule, "amount"));
+  db.save("transactions"); db.save("repeats");
+  return { e, prev, notYet };
+}
+export function undoRepeat(w, done) {
+  db.remove("transactions", done.e);
+  w.rule.lastAdded = done.prev;
+  if (done.notYet) w.rule.notYet = done.notYet;
+  db.touch(w.rule);
+  db.save("repeats");
+}
+// Not yet: ask again tomorrow.
+export function notYetRepeat(w) {
+  w.rule.notYet = w.key + "@" + F.todayIso();
+  db.touch(w.rule);
+  db.save("repeats");
 }
 
 // Everything with a date from the lists (calendar, Home, bell). lead = days before it starts reminding (-1 = never).

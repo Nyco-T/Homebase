@@ -4,7 +4,7 @@
 import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { h, icon, toast, isOpen } from "./ui.js";
-import { addMissingRepeats } from "./kinds.js";
+import { addMissingRepeats, waitingRepeats } from "./kinds.js";
 import { register as registerRules, setDatesSource } from "./rules.js";
 import * as auto from "./auto.js";
 import * as reminders from "./reminders.js";
@@ -16,7 +16,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.0.15";
+export const VERSION = "1.0.16";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -36,7 +36,8 @@ export function openItem(item) {
   if (!item) return;
   if (item.kind === "backup") return go("more/settings");
   if (item.kind === "transactions" && !item.id) return go("money");
-  if (item.kind === "phonecal") return phonecal.update();   // from a tap, so the clipboard may be read
+  if (item.kind === "phonecal") return phonecal.update();
+  if (item.kind === "confirm") { const w = waitingRepeats().find(x => x.rule.id === item.id); return w ? money.askRepeat(w) : go("money"); }   // from a tap, so the clipboard may be read
   const rec = item.id && db.byId(item.kind, item.id);
   if (rec && phonecal.isPhone(rec)) phonecal.show(rec);
   else if (rec) editRecord(item.kind, rec);

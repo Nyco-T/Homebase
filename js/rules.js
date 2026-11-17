@@ -4,7 +4,7 @@
 import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { rule, reminder, find, NEVER, marks, setBookkeeping } from "./auto.js";
-import { d, num, isOn, nextEvent, guessCategory } from "./kinds.js";
+import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
 const step = text => ({ text, done: false });
@@ -62,6 +62,11 @@ export function register() {
       return [{ date: F.today(), title: "This month may end at " + F.signedMoney(f.end), detail: "still to come " + F.signedMoney(f.coming) + ", everyday ≈ " + F.signedMoney(f.rest), kind: "transactions", id: null, lead: 0, icon: "trend", color: "--red" }];
     });
 
+  reminder("money.confirm-repeats", "money", "Ask before booking repeating entries",
+    "Salary, rent and other repeating entries are only booked when you say they really came or were paid (\"Did your salary arrive?\" - Yes / Not yet, asked again the next day). Off: they're booked on their day by themselves.", () =>
+      waitingRepeats().filter(w => !w.askedToday).map(w => ({ date: w.day, title: waitQuestion(w) + " " + F.signedMoney(num(w.rule, "amount")),
+        detail: (w.late ? "not there yet on " : "due ") + F.shortDate(w.day) + " · tap to answer", kind: "confirm", id: w.rule.id, lead: 0, icon: "repeat", color: "--money" })));
+
   reminder("money.expected", "money", "Repeating payments in the calendar",
     "Rent, salary and other repeating entries - and Money entries booked for a later day - show on the calendar on the day they come.", () => {
       const out = [];
@@ -73,8 +78,7 @@ export function register() {
           if ((r.lastAdded || "") >= F.monthKey(m)) continue;
           const day = new Date(m.getFullYear(), m.getMonth(), Math.max(1, Math.min(num(r, "day") || 1, F.daysInMonth(m.getFullYear(), m.getMonth()))));
           // already booked by hand in that month (same text and amount)? then the booked entry shows instead
-          const booked = db.all("transactions").some(x => (x.repeat === r.id || ((x.description || "").toLowerCase() === (r.description || "").toLowerCase() && Math.abs(num(x, "amount") - num(r, "amount")) < 0.01))
-            && (x.date || "").startsWith(F.monthKey(m)));
+          const booked = bookedByHand(r, F.monthKey(m));
           if (day >= t && !booked) out.push({ date: day, title: r.description + " " + F.signedMoney(num(r, "amount")), detail: "repeating entry", kind: "repeats", id: r.id, lead: -1, icon: "repeat", color: "--money" });
         }
       }

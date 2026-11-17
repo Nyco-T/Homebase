@@ -9,6 +9,7 @@ import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
 import { forecast } from "../rules.js";
 import { go, openItem, state, installUpdate } from "../app.js";
+import { waitingBlock } from "./money.js";
 
 function greeting() {
   const hr = new Date().getHours();
@@ -127,6 +128,8 @@ function moneyCard() {
   const spent = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
   const bal = balanceOn(t);   // the total you have, carried over
   const c = card("Money this month", "wallet", "--money", "money");
+  const waiting = waitingBlock();   // "Did your salary arrive?"
+  if (waiting) { waiting.classList.remove("card"); waiting.style.marginBottom = "10px"; c.append(waiting); }
   c.append(h("div.stats", { style: { marginBottom: "6px" } },
     h("div", h("div.caps", "Balance"), h("div.v.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal))),
     h("div", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(income))),

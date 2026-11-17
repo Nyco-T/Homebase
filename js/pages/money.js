@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance } from "../kinds.js";
+import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat } from "../kinds.js";
 import { editRecord, newRecord } from "../form.js";
 import { forecast } from "../rules.js";
 import { go } from "../app.js";
@@ -54,6 +54,7 @@ function entries(root) {
     current && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
     current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
   root.append(hero);
+  if (current) { const w = waitingBlock(); if (w) root.append(w); }
 
   // where it went: the top 3, the rest on tap
   const cats = {};
@@ -181,7 +182,7 @@ function entrySheet() {
 
 function repeats(root) {
   const rules = db.all("repeats").slice().sort((a, b) => (num(a, "day") || 1) - (num(b, "day") || 1));
-  root.append(h("div.sub", "Rent, salary, subscriptions - booked into Money by themselves every month."));
+  root.append(h("div.sub", "Rent, salary, subscriptions - on their day Homebase asks if they came / were paid, then books them (Automation → Money to book them without asking)."));
   if (!rules.length) root.append(empty("Nothing repeating yet. Tap + to add your rent or salary."));
   else {
     const monthly = rules.filter(r => !isOn(r, "paused")).reduce((a, r) => a + num(r, "amount"), 0);
@@ -205,4 +206,37 @@ function repeats(root) {
     return s;
   } }));
   addMissingRepeats();
+}
+
+// ---------------- "Did your salary arrive?" ----------------
+
+function answered(w, done) {
+  toast("Booked: " + w.rule.description + " " + F.signedMoney(num(done.e, "amount")), "Undo", () => undoRepeat(w, done));
+}
+
+// The question with the amount to change (salary a bit different this month?). Opened from a row or the bell.
+export async function askRepeat(w) {
+  const input = h("input.field", { inputmode: "decimal", value: F.number(num(w.rule, "amount")), style: { marginTop: "10px" } });
+  const body = h("div", h("div.muted", (w.late ? "It wasn't there on " : "Due on ") + F.date(w.day) + ". Booked " + (w.late ? "today" : "on " + F.shortDate(w.day)) + " - change the amount if it was different."), input);
+  const r = await dialog(waitQuestion(w), body, [{ label: "Not yet", value: "no" }, { label: "Yes, book it", value: "yes", main: true }]);
+  if (r === "no") { notYetRepeat(w); toast("OK - Homebase asks again tomorrow"); }
+  if (r === "yes") {
+    const a = F.parseNumber(input.value);
+    answered(w, confirmRepeat(w, a == null ? undefined : a));
+  }
+}
+
+// The open questions as a card (Money page and Home). null when nothing waits.
+export function waitingBlock() {
+  const open = waitingRepeats().filter(w => !w.askedToday);
+  if (!open.length) return null;
+  return h("div.card", h("div.caps", { style: { marginBottom: "6px" } }, "Waiting for your yes"),
+    ...open.map(w => {
+      const a = num(w.rule, "amount");
+      return h("div.row", { onclick: () => askRepeat(w) }, tile("repeat", a > 0 ? "--money" : "--home"),
+        h("div.grow", h("div.title", { style: { whiteSpace: "normal" } }, waitQuestion(w)), h("div.meta", F.signedMoney(a) + " · " + (w.late ? "not there on " : "due ") + F.shortDate(w.day))),
+        h("div", { style: { display: "flex", gap: "4px" } },
+          btn("Yes", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); answered(w, confirmRepeat(w)); } }),
+          btn("Not yet", { kind: "ghost", small: true, onclick: e => { e.stopPropagation(); notYetRepeat(w); toast("OK - Homebase asks again tomorrow"); } })));
+    }));
 }
