@@ -1,0 +1,182 @@
+// The nine lists Homebase keeps - the same fields and rules as the desktop app (src/core/Kinds.java).
+
+import * as db from "./db.js";
+import * as F from "./fmt.js";
+
+const f = (key, label, type, more = {}) => ({ key, label, type, ...more });
+
+export const KINDS = {
+  events: { title: "Events", one: "Event", icon: "calendar", color: "--today", titleKey: "title", fields: [
+    f("title", "Title", "text"), f("date", "Date", "date"), f("time", "Time", "text", { hint: "18:30" }), f("end", "Until", "date"),
+    f("place", "Where", "text"), f("repeat", "Repeats", "choice", { choices: ["Never", "Weekly", "Monthly", "Yearly"] }),
+    f("category", "Kind", "open", { choices: ["Birthday", "Appointment", "Party", "Concert", "Sport", "Family", "Holiday", "Other"] }),
+    f("notes", "Notes", "long")],
+    defaults: () => ({ date: F.todayIso(), repeat: "Never" }) },
+
+  tasks: { title: "Tasks", one: "Task", icon: "check", color: "--today", titleKey: "title", fields: [
+    f("title", "Task", "text"), f("due", "Due", "date"), f("priority", "Priority", "choice", { choices: ["High", "Normal", "Low"] }),
+    f("list", "List", "open", { choices: ["Personal", "Errands", "Home", "Admin", "Money", "Health", "Shopping"] }),
+    f("repeat", "Repeats", "choice", { choices: ["Never", "Daily", "Weekly", "Every 2 weeks", "Monthly", "Yearly"] }),
+    f("steps", "Steps", "checklist"), f("notes", "Notes", "long")],
+    defaults: () => ({ priority: "Normal", repeat: "Never", done: false }) },
+
+  notes: { title: "Notes", one: "Note", icon: "note", color: "--notes", titleKey: "title", fields: [
+    f("title", "Title", "text"), f("body", "Note", "long", { rows: 10 }), f("tags", "Tags", "tags"), f("pinned", "Pinned", "bool")],
+    defaults: () => ({}) },
+
+  transactions: { title: "Money", one: "Entry", icon: "wallet", color: "--money", titleKey: "description", fields: [
+    f("description", "Description", "text"), f("amount", "Amount", "money", { hint: "−12,50 for an expense" }),
+    f("category", "Category", "open"), f("date", "Date", "date"), f("notes", "Notes", "long")],
+    defaults: () => ({ date: F.todayIso() }) },
+
+  repeats: { title: "Repeating entries", one: "Repeating entry", icon: "repeat", color: "--money", titleKey: "description", fields: [
+    f("description", "Description", "text"), f("amount", "Amount", "money", { hint: "negative = expense" }),
+    f("category", "Category", "open"), f("day", "Day of month", "number"), f("paused", "Paused", "bool")],
+    defaults: () => ({ day: 1, lastAdded: F.monthKey(F.addMonths(F.today(), -1)) }) },
+
+  shopping: { title: "Shopping list", one: "Item", icon: "cart", color: "--home", titleKey: "item", fields: [
+    f("item", "Item", "text"), f("qty", "How much", "text", { hint: "2, 500 g, 1 pack" }),
+    f("store", "Shop", "open", { choices: ["Supermarkt", "Drogerie", "Bäckerei", "Markt", "Online"] }), f("price", "Price", "money"), f("notes", "Notes", "text")],
+    defaults: () => ({ done: false }) },
+
+  meals: { title: "Meal plan", one: "Meal", icon: "grid", color: "--home", titleKey: "title", fields: [
+    f("title", "Meal", "text"), f("date", "Day", "date"), f("slot", "When", "choice", { choices: ["Breakfast", "Lunch", "Dinner", "Snack"] }), f("notes", "Notes", "text")],
+    defaults: () => ({ date: F.todayIso(), slot: "Dinner" }) },
+
+  recipes: { title: "Recipes", one: "Recipe", icon: "pot", color: "--home", titleKey: "name", fields: [
+    f("name", "Name", "text"), f("category", "Category", "open", { choices: ["Breakfast", "Main", "Pasta", "Soup", "Salad", "Snack", "Dessert", "Baking"] }),
+    f("minutes", "Time (min)", "number"), f("servings", "Servings", "number"), f("favorite", "Favorite", "bool"),
+    f("ingredients", "Ingredients", "checklist"), f("steps", "Steps", "long", { rows: 8 }), f("tags", "Tags", "tags"), f("source", "Source", "url")],
+    defaults: () => ({}) },
+
+  chores: { title: "Chores", one: "Chore", icon: "sparkle", color: "--home", titleKey: "name", fields: [
+    f("name", "Job", "text"), f("area", "Area", "open", { choices: ["Kitchen", "Bathroom", "Living room", "Bedroom", "Laundry", "Plants", "Outside", "Other"] }),
+    f("every", "Every (days)", "number"), f("lastDone", "Last done", "date"), f("who", "Who", "text"), f("notes", "Notes", "long")],
+    defaults: () => ({ every: 7, lastDone: F.todayIso() }) },
+};
+
+export const titleOf = (kind, r) => (r && r[KINDS[kind].titleKey]) || "Untitled " + KINDS[kind].one.toLowerCase();
+export const d = (r, key) => F.parseIso(r && r[key]);
+export const num = (r, key) => typeof r?.[key] === "number" ? r[key] : (F.parseNumber(r?.[key]) ?? 0);
+export const isOn = (r, key) => r?.[key] === true || r?.[key] === "true";
+
+// The day after "from" for a repeat word.
+export function nextDate(from, cycle) {
+  switch (cycle) {
+    case "Daily": return F.addDays(from, 1);
+    case "Weekly": return F.addDays(from, 7);
+    case "Every 2 weeks": return F.addDays(from, 14);
+    case "Quarterly": return F.addMonths(from, 3);
+    case "Yearly": return F.addMonths(from, 12);
+    default: return F.addMonths(from, 1);
+  }
+}
+
+// The next time an event happens (repeating ones move forward to today or later).
+export function nextEvent(r) {
+  let x = d(r, "date");
+  if (!x) return null;
+  if (!r.repeat || r.repeat === "Never") return x;
+  const t = F.today();
+  for (let i = 0; x < t && i < 5000; i++) x = nextDate(x, r.repeat);
+  return x;
+}
+
+export function nextChore(r) {
+  const last = d(r, "lastDone");
+  return last ? F.addDays(last, Math.max(1, num(r, "every") || 7)) : F.today();
+}
+
+// Ticks a task off; a repeating task comes back with its next date.
+export function finishTask(r) {
+  r.done = true;
+  r.doneDate = F.todayIso();
+  db.touch(r);
+  if (r.repeat && r.repeat !== "Never") {
+    const again = JSON.parse(JSON.stringify(r));
+    delete again.id; delete again.created;
+    again.done = false; delete again.doneDate;
+    let next = nextDate(d(r, "due") || F.today(), r.repeat);
+    while (next < F.today()) next = nextDate(next, r.repeat);
+    again.due = F.iso(next);
+    for (const s of again.steps || []) s.done = false;
+    db.add("tasks", again);
+  }
+  db.save("tasks");
+}
+
+export function choreDone(r) {
+  r.lastDone = F.todayIso();
+  (r.history = r.history || []).push(F.todayIso());
+  db.touch(r);
+  db.save("chores");
+}
+
+// Puts an entry into Money (negative = expense).
+export function book(description, amount, category, dateIso, note) {
+  const r = { description, amount, category: category || "Other", date: dateIso || F.todayIso() };
+  if (note) r.notes = note;
+  return db.add("transactions", r);
+}
+
+// The category this description had last time ("REWE" -> "Groceries"), else "Other".
+export function guessCategory(description) {
+  const text = (description || "").toLowerCase().trim();
+  for (const rule of db.all("rules")) {
+    const m = (rule.match || "").toLowerCase().trim();
+    if (m && text.includes(m) && rule.category) return rule.category;
+  }
+  let best = null;
+  for (const t of db.all("transactions")) {
+    if ((t.description || "").toLowerCase() === text && t.category && t.category !== "Other" && (!best || t.date > best.date)) best = t;
+  }
+  return best ? best.category : "Other";
+}
+
+export function names(kind, key) {
+  const out = new Set();
+  for (const r of db.all(kind)) if (r[key]) out.add(r[key]);
+  return [...out].sort((a, b) => a.localeCompare(b));
+}
+
+// Repeating entries (rent, salary): every month since "lastAdded" that's due gets its entry.
+export function addMissingRepeats() {
+  const t = F.today();
+  const now = F.monthKey(t);
+  let changed = false;
+  for (const rule of db.all("repeats")) {
+    if (isOn(rule, "paused")) continue;
+    let [y, m] = (rule.lastAdded || F.monthKey(F.addMonths(t, -1))).split("-").map(Number);
+    for (let guard = 0; guard < 36; guard++) {
+      m++; if (m > 12) { m = 1; y++; }
+      const key = y + "-" + String(m).padStart(2, "0");
+      if (key > now) break;
+      const day = new Date(y, m - 1, Math.max(1, Math.min(num(rule, "day") || 1, F.daysInMonth(y, m - 1))));
+      if (day > t) break;
+      const e = { id: db.newId(), created: db.stamp(), updated: db.stamp(), description: rule.description, amount: num(rule, "amount"),
+        category: rule.category || "Other", date: F.iso(day), repeat: rule.id };
+      db.all("transactions").push(e);
+      rule.lastAdded = key;
+      db.touch(rule);
+      changed = true;
+    }
+  }
+  if (changed) { db.save("transactions"); db.save("repeats"); }
+}
+
+// Everything with a date from the lists (calendar, Home, bell). lead = days before it starts reminding (-1 = never).
+export function dues() {
+  const out = [];
+  for (const e of db.all("events")) {
+    const n = nextEvent(e);
+    if (n) out.push({ date: n, title: e.title || "Event", detail: [e.time, e.place].filter(Boolean).join(" · "), kind: "events", id: e.id, lead: 1, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
+  }
+  for (const r of db.all("tasks")) {
+    const due = d(r, "due");
+    if (due && !isOn(r, "done")) out.push({ date: due, title: r.title, detail: r.list || "", kind: "tasks", id: r.id, lead: 0, icon: "check", color: "--today" });
+  }
+  for (const c of db.all("chores")) {
+    out.push({ date: nextChore(c), title: c.name, detail: c.area || "", kind: "chores", id: c.id, lead: 0, icon: "sparkle", color: "--home" });
+  }
+  return out.filter(x => x.date).sort((a, b) => a.date - b.date);
+}
