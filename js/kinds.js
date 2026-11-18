@@ -60,7 +60,7 @@ export const dueText = r => { const x = F.parseIso(r?.due); return x ? F.relativ
 // sorts by day, then time (no time = end of the day)
 export const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "99").localeCompare(b.time || "99");
 // The words of a record you can search for - its texts, not its field names, ids or timestamps.
-const NOT_SEARCHED = new Set(["id", "created", "updated", "auto", "recipe", "repeat", "transfer", "repeatMonth", "phoneCalendar"]);
+const NOT_SEARCHED = new Set(["id", "created", "updated", "auto", "recipe", "repeat", "transfer", "repeatMonth", "phoneCalendar", "repeatDay", "nextCopy"]);
 export function searchText(rec) {
   const out = [];
   const walk = v => { if (v == null) return; if (typeof v === "string" || typeof v === "number") out.push(String(v)); else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === "object") Object.values(v).forEach(walk); };
@@ -84,14 +84,39 @@ export function nextDate(from, cycle) {
   }
 }
 
+// Repeats by month are counted from the first date, so the 31st comes back as the 31st after a short month
+// (and a birthday on 29.02. on the 29th in leap years) instead of sliding to the 28th for good.
+const DAY_STEPS = { Daily: 1, Weekly: 7, "Every 2 weeks": 14 };
+const MONTH_STEPS = { Quarterly: 3, Yearly: 12 };
+const nthRepeat = (first, cycle, k) => DAY_STEPS[cycle] ? F.addDays(first, DAY_STEPS[cycle] * k) : F.addMonths(first, (MONTH_STEPS[cycle] || 1) * k);
+
+// The first time a repeat (starting on "first") happens on or after a day.
+export function repeatOnOrAfter(first, cycle, day) {
+  if (first >= day) return first;
+  const step = DAY_STEPS[cycle];
+  let k = step ? Math.floor(F.daysBetween(first, day) / step)
+    : Math.floor(((day.getFullYear() - first.getFullYear()) * 12 + day.getMonth() - first.getMonth()) / (MONTH_STEPS[cycle] || 1));
+  let x = nthRepeat(first, cycle, k);
+  while (x < day) x = nthRepeat(first, cycle, ++k);
+  return x;
+}
+
+// Every time a repeating event happens between two days (both included).
+export function eventDaysBetween(r, from, to) {
+  const first = d(r, "date");
+  if (!first) return [];
+  if (!r.repeat || r.repeat === "Never") return first >= from && first <= to ? [first] : [];
+  const out = [];
+  for (let x = repeatOnOrAfter(first, r.repeat, from), i = 0; x <= to && i < 400; i++) { out.push(x); x = repeatOnOrAfter(first, r.repeat, F.addDays(x, 1)); }
+  return out;
+}
+
 // The next time an event happens (repeating ones move forward to today or later).
 export function nextEvent(r) {
-  let x = d(r, "date");
+  const x = d(r, "date");
   if (!x) return null;
   if (!r.repeat || r.repeat === "Never") return x;
-  const t = F.today();
-  for (let i = 0; x < t && i < 5000; i++) x = nextDate(x, r.repeat);
-  return x;
+  return repeatOnOrAfter(x, r.repeat, F.today());
 }
 
 export function nextChore(r) {
@@ -113,9 +138,18 @@ export function finishTask(r) {
     const again = JSON.parse(JSON.stringify(r));
     delete again.id; delete again.created;
     again.done = false; delete again.doneDate;
-    let next = nextDate(d(r, "due") || F.today(), r.repeat);
-    while (next < F.today()) next = nextDate(next, r.repeat);
+    // by month: the task keeps its day of the month (remembered once a short month had to move it)
+    const due = d(r, "due") || F.today();
+    const byMonth = !DAY_STEPS[r.repeat];
+    const keep = num(r, "repeatDay");
+    const day = keep && due.getDate() === Math.min(keep, F.daysInMonth(due.getFullYear(), due.getMonth())) ? keep : due.getDate();
+    let next = due;
+    do {
+      next = nextDate(next, r.repeat);
+      if (byMonth) next = new Date(next.getFullYear(), next.getMonth(), Math.min(day, F.daysInMonth(next.getFullYear(), next.getMonth())));
+    } while (next < F.today());
     again.due = F.iso(next);
+    if (byMonth && day !== next.getDate()) again.repeatDay = day; else delete again.repeatDay;
     for (const s of again.steps || []) s.done = false;
     db.add("tasks", again);
     r.nextCopy = again.id;   // so Undo removes exactly this copy

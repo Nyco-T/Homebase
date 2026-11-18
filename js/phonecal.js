@@ -90,9 +90,12 @@ export function apply(items) {
     }
     if (diff) { db.touch(old); changed++; }
   }
-  // gone from the iPhone: from tomorrow on (the Shortcut may leave out what already happened today)
+  // gone from the iPhone: from tomorrow on (the Shortcut may leave out what already happened today) - and one of
+  // today's that the iPhone still has at another time (it was moved, so the old time goes)
+  const dayKey = e => [e.phoneCalendar || "", e.title, e.date].join("|").toLowerCase();
+  const stillThere = new Set(items.map(dayKey));
   for (const [k, e] of mine) {
-    if (!seen.has(k) && (e.date || "") > today) { list.splice(list.indexOf(e), 1); removed++; }
+    if (!seen.has(k) && ((e.date || "") > today || (e.date === today && stillThere.has(dayKey(e))))) { list.splice(list.indexOf(e), 1); removed++; }
   }
   db.save("events");
   db.setSetting("phonecal.last", F.nowStamp());

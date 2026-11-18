@@ -74,7 +74,9 @@ export function balances(list = db.all("timeoff")) {
   const per = perYear();
   const now = F.today();
   const days = list.flatMap(r => daysOf(r).filter(x => x.weight > 0)).sort((a, b) => a.day - b.day);
-  const years = new Set([now.getFullYear(), now.getFullYear() + 1, ...days.map(x => x.day.getFullYear())]);
+  // every year you told Homebase what was left of, even without a break in it - its days can still be taken
+  // until 31 March of the next year (a year you never set isn't guessed)
+  const years = new Set([now.getFullYear(), now.getFullYear() + 1, ...days.map(x => x.day.getFullYear()), ...Object.keys(usedBefore()).map(Number)]);
   const out = {};
   for (const y of [...years].sort()) {
     const before = Number(usedBefore()[y] || 0);

@@ -6,7 +6,7 @@ import { h, icon, tile, tickBox, btn, seg, chips, toast, empty, section, sheet, 
 import * as TO from "../timeoff.js";
 import * as ICS from "../ics.js";
 import { switchEl } from "../ui.js";
-import { d, num, isOn, nextChore, nextEvent, finishTask, choreDone, dueText, byDue } from "../kinds.js";
+import { d, num, isOn, nextChore, nextEvent, eventDaysBetween, finishTask, choreDone, dueText, byDue } from "../kinds.js";
 import { quickAdd } from "../quick.js";
 import { editRecord, newRecord } from "../form.js";
 import * as reminders from "../reminders.js";
@@ -64,7 +64,7 @@ function tasks(root) {
 
   const shown = all.filter(filters[taskFilter]);
   if (!shown.length) {
-    root.append(empty(all.length ? "Nothing here." : "No tasks yet. Type one above - a day at the end (fri, +3, 24.11.) sets the due date, ! makes it important."));
+    root.append(empty(all.length ? (!open.length && taskFilter !== "done" ? "All done 🎉" : "Nothing here.") : "No tasks yet. Type one above - a day at the end (fri, +3, 24.11.) sets the due date, ! makes it important."));
   } else if (taskFilter === "done") {
     const done = shown.sort((a, b) => (b.doneDate || "").localeCompare(a.doneDate || "")).slice(0, 30);
     root.append(list(done.map(taskRow)));
@@ -83,7 +83,6 @@ function tasks(root) {
       root.append(list(items.map(taskRow)));
     }
   }
-  if (!open.length && taskFilter !== "done" && all.length) root.append(h("div.empty", "All done 🎉"));
   root.append(fab(() => newRecord("tasks")));
 }
 
@@ -139,12 +138,10 @@ export function calendar(root) {
     for (const hd of TO.holidays(y)) if (hd.date >= start && hd.date <= end) add(hd.date, { date: hd.date, title: "🎉 " + hd.name, detail: "public holiday", kind: "holiday", id: null, icon: "sparkle", color: "--warn" });
   }
   for (const e of db.all("events")) {
-    if (!e.repeat || e.repeat === "Never" || !d(e, "date")) continue;
-    let x = d(e, "date");
+    if (!e.repeat || e.repeat === "Never") continue;
     const shownNext = nextEvent(e)?.getTime();
-    for (let i = 0; x <= end && i < 600; i++) {
-      if (x >= start && x.getTime() !== shownNext) (byDay[F.iso(x)] = byDay[F.iso(x)] || []).push({ date: x, title: e.title, detail: e.time || "", time: (e.time || "").slice(0, 5), kind: "events", id: e.id, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
-      x = e.repeat === "Weekly" ? F.addDays(x, 7) : e.repeat === "Monthly" ? F.addMonths(x, 1) : F.addMonths(x, 12);
+    for (const x of eventDaysBetween(e, start, end)) {
+      if (x.getTime() !== shownNext) add(x, { date: x, title: e.title, detail: e.time || "", time: (e.time || "").slice(0, 5), kind: "events", id: e.id, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
     }
   }
 

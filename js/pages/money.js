@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
-import { d, num, isOn, guessCategory, addMissingRepeats, names, splitEntry, isCorrection, isNeutral, isTransfer, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat, accounts, accountOf, accountIcon, moveMoney, transferPair, guessAccount } from "../kinds.js";
+import { d, num, isOn, guessCategory, names, splitEntry, isCorrection, isNeutral, isTransfer, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat, accounts, accountOf, accountIcon, moveMoney, transferPair, guessAccount } from "../kinds.js";
 import { editRecord, newRecord, calcField, choiceChips, usedMost } from "../form.js";
 import { forecast } from "../rules.js";
 import { catStyle } from "../cats.js";
@@ -468,15 +468,8 @@ function repeats(root) {
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     })));
   }
-  root.append(h("button.fab", { "aria-label": "New", html: icon("plus", 26), onclick: () => {
-    const s = newRecord("repeats");
-    const t = F.today();
-    // the first month counts from now on
-    const r = db.all("repeats")[db.all("repeats").length - 1];
-    if (r) r.lastAdded = F.monthKey(new Date(t.getFullYear(), t.getMonth() - 1, 1));
-    return s;
-  } }));
-  addMissingRepeats();
+  // a new one counts from this month on (its defaults say so); booking what's due is the automation's job
+  root.append(h("button.fab", { "aria-label": "New", html: icon("plus", 26), onclick: () => newRecord("repeats") }));
 }
 
 // ---------------- "Did your salary arrive?" ----------------

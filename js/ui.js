@@ -195,6 +195,8 @@ export function sheet(title, content, { actions = [], onClose } = {}) {
     if (closed) return;
     closed = true;
     openCount--;
+    // a closing popup takes no more taps (a quick double tap on "Add" would book twice)
+    box.style.pointerEvents = dim.style.pointerEvents = "none";
     dim.classList.remove("in");
     box.classList.remove("dragging");
     box.style.transform = "translateY(" + (box.offsetHeight + 40) + "px)";
@@ -250,6 +252,7 @@ export function dialog(title, body, buttons) {
       if (done) return;
       done = true;
       openCount--;
+      box.style.pointerEvents = dim.style.pointerEvents = "none";
       dim.classList.remove("in"); box.classList.remove("in");
       setTimeout(() => { dim.remove(); box.remove(); }, 180);
       resolve(v);
