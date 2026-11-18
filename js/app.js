@@ -11,6 +11,7 @@ import * as reminders from "./reminders.js";
 import { editRecord } from "./form.js";
 import * as phonecal from "./phonecal.js";
 import * as lock from "./lock.js";
+import * as push from "./push.js";
 import * as home from "./pages/home.js";
 import * as plan from "./pages/plan.js";
 import * as calendarPage from "./pages/calendar.js";
@@ -18,7 +19,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.8.0";
+export const VERSION = "1.9.0";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "check"], ["calendar", "Calendar", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, calendar: calendarPage, money, food, more };
@@ -134,6 +135,7 @@ function scheduleAuto() {
 function runAuto() {
   addMissingRepeats();
   const done = auto.run();
+  push.schedule().catch(() => {});   // notifications for the next days, through ntfy (if switched on)
   if (done.length) toast("Automation: " + done[0] + (done.length > 1 ? "  (+" + (done.length - 1) + ")" : ""), "Show", () => go("more/automation"));
 }
 

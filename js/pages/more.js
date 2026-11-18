@@ -4,6 +4,7 @@ import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, switchEl, confirm, dialog, chips } from "../ui.js";
 import * as lock from "../lock.js";
+import * as push from "../push.js";
 import { editRecord, newRecord } from "../form.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -139,6 +140,7 @@ function settings(root) {
   // notifications
   const supported = "Notification" in window;
   root.append(section("Notifications"));
+  root.append(pushBlock());
   root.append(h("div.list", h("div.row",
     h("div.grow", h("div.title", "Morning summary"), h("div.meta", { style: { whiteSpace: "normal" } },
       supported ? "One notification a day with what's due, when you open Homebase - plus the number on the app icon." : "Needs Homebase on the Home Screen (iOS 16.4 or newer).")),
@@ -266,4 +268,46 @@ async function turnOn() {
   await db.setSetting("lock.on", true);
   toast(await lock.faceIdAvailable() ? "Lock on - now tap “Set up” for Face ID" : "Lock on with your backup code");
   return true;
+}
+
+// ---------------- Push through ntfy ----------------
+
+function pushBlock() {
+  const box = h("div.list", { style: { marginBottom: "8px" } });
+  const draw = () => {
+    const c = push.conf();
+    box.innerHTML = "";
+    box.append(h("div.row", tile("bell", "--accent"),
+      h("div.grow", h("div.title", "Push through ntfy"), h("div.meta", { style: { whiteSpace: "normal" } }, c.on ? "on · works when Homebase is closed" : "reminders even when Homebase is closed - needs the free ntfy app")),
+      switchEl(c.on, async on => {
+        await push.setConf({ on, topic: c.topic || push.newTopic() });
+        if (on) { const n = await push.schedule(); toast(n ? F.plural(n, "notification", "notifications") + " scheduled" : "Push on - now add your channel in the ntfy app"); }
+        draw();
+      })));
+    if (!c.on) return;
+    const chip = (label, active, onclick) => h("button.chip" + (active ? ".on" : ""), { type: "button", onclick }, label);
+    const set = async patch => { await push.setConf(patch); draw(); push.reschedule(); };
+    box.append(h("div.row", { style: { display: "block" } },
+      h("div.title", "Your secret channel"),
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginTop: "6px" } },
+        h("code", { style: { flex: "1", fontSize: "13px", padding: "8px 10px", borderRadius: "10px", background: "var(--glass)", border: "1px solid var(--glass-border)", userSelect: "all" } }, c.topic),
+        btn("Copy", { kind: "soft", small: true, onclick: async () => { try { await navigator.clipboard.writeText(c.topic); toast("Copied - paste it in the ntfy app"); } catch (e) { toast("Press and hold the name to copy it"); } } })),
+      h("div.meta", { style: { whiteSpace: "normal", marginTop: "5px" } }, "In the ntfy app: + → paste this name → Subscribe. Nobody can guess it.")));
+    box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Remind me before"),
+      h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [5, 15, 30, 60].map(m => chip(m === 60 ? "1 hour" : m + " min", c.before === m, () => set({ before: m })))),
+      h("div.meta", "tasks and appointments with a time")));
+    box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Morning summary"),
+      h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [["", "off"], ["07:00", "07:00"], ["08:00", "08:00"], ["09:00", "09:00"]].map(([v, l]) => chip(l, c.morning === v, () => set({ morning: v })))),
+      h("div.meta", { style: { whiteSpace: "normal" } }, "how many tasks, appointments, birthdays, chores and payments today")));
+    box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Evening preview"),
+      h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [["", "off"], ["19:00", "19:00"], ["20:00", "20:00"], ["21:00", "21:00"]].map(([v, l]) => chip(l, c.evening === v, () => set({ evening: v })))),
+      h("div.meta", "what tomorrow holds")));
+    box.append(h("div.row", h("div.grow", h("div.title", "Show details"), h("div.meta", { style: { whiteSpace: "normal" } }, c.details ? "on · task and appointment titles go through ntfy.sh" : "off · only the kind of thing leaves your phone (“A task is due in 15 minutes”)")),
+      switchEl(c.details, v => set({ details: v }))));
+    const last = db.setting("ntfy.last", "");
+    box.append(h("div.row", h("div.grow", h("div.title", "Send a test"), h("div.meta", last ? "last scheduled " + F.relative(F.parseIso(last)) + " " + last.slice(11, 16) : "arrives in about 10 seconds")),
+      btn("Test", { kind: "soft", small: true, onclick: async () => { try { await push.test(); toast("Test sent - it arrives in about 10 seconds"); } catch (e) { toast("Couldn't reach ntfy.sh - are you online?"); } } })));
+  };
+  draw();
+  return box;
 }
