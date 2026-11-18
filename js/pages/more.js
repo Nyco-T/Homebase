@@ -302,6 +302,8 @@ function pushBlock() {
     box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Evening preview"),
       h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [["", "off"], ["19:00", "19:00"], ["20:00", "20:00"], ["21:00", "21:00"]].map(([v, l]) => chip(l, c.evening === v, () => set({ evening: v })))),
       h("div.meta", "what tomorrow holds")));
+    box.append(h("div.row", h("div.grow", h("div.title", "Payments the day before"), h("div.meta", { style: { whiteSpace: "normal" } }, "“A payment goes out tomorrow” in the evening (at the evening preview time, else 19:00) - rent, phone, subscriptions; no names or amounts")),
+      switchEl(c.payments, v => set({ payments: v }))));
     box.append(h("div.row", h("div.grow", h("div.title", "Show details"), h("div.meta", { style: { whiteSpace: "normal" } }, c.details ? "on · task and appointment titles go through ntfy.sh" : "off · only the kind of thing leaves your phone (“A task is due in 15 minutes”)")),
       switchEl(c.details, v => set({ details: v }))));
     const last = db.setting("ntfy.last", "");

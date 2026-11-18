@@ -9,12 +9,13 @@
 //  - morning summary (default 08:00): tasks today and overdue, appointments, birthdays (today and tomorrow),
 //    chores, payments to confirm, time off starting, counting cash, backup - as counts
 //  - evening preview (optional, default 20:00): what tomorrow holds, as counts
+//  - payments: the evening before money goes out (repeating expenses, entries booked for that day) - no names, no amounts
 // Events that came from the iPhone calendar are left out of the "before" reminders - your iPhone already rings for them.
 
 import * as db from "./db.js";
 import * as F from "./fmt.js";
 import * as reminders from "./reminders.js";
-import { isOn, d, nextChore, nextEvent } from "./kinds.js";
+import { isOn, d, num, nextChore, nextEvent, bookedByHand, isNeutral } from "./kinds.js";
 
 const SERVER = "https://ntfy.sh/";
 // the glass house, shown as a picture on the right of the notification (a public file of the app - no personal data)
@@ -22,7 +23,7 @@ const ICON = "https://nyco-t.github.io/Homebase/icons/icon-192.png";
 const AHEAD_MS = 3 * 24 * 3600 * 1000 - 60 * 1000;   // ntfy.sh schedules at most 3 days ahead
 const MAX_PER_RUN = 25;                                // stay well inside ntfy.sh's limits
 
-const defaults = { on: false, topic: "", before: 15, morning: "08:00", evening: "", details: false };
+const defaults = { on: false, topic: "", before: 15, morning: "08:00", evening: "", details: false, payments: true };
 export const conf = () => ({ ...defaults, ...(db.setting("ntfy", {}) || {}) });
 export const setConf = patch => db.setSetting("ntfy", { ...conf(), ...patch });
 
@@ -77,12 +78,32 @@ export function planned(now = new Date()) {
       const text = summary(day, true);
       if (text && at(day, c.morning) <= soon) add("morning:" + F.iso(day) + ":" + c.morning, at(day, c.morning), "☀️ Good morning · " + text, "sunny");
     }
+    if (c.payments) {
+      // the evening before (at the evening preview time, else 19:00)
+      const n = paymentsOn(F.addDays(day, 1));
+      const when = at(day, c.evening || "19:00");
+      if (n && when <= soon) add("pay:" + F.iso(F.addDays(day, 1)), when, n === 1 ? "A payment goes out tomorrow" : n + " payments go out tomorrow", "");
+    }
     if (c.evening) {
       const text = summary(F.addDays(day, 1), false);
       if (text && at(day, c.evening) <= soon) add("evening:" + F.iso(day) + ":" + c.evening, at(day, c.evening), "🌙 Tomorrow: " + text, "crescent_moon");
     }
   }
   return out.sort((a, b) => a.when - b.when);
+}
+
+// How many payments go out on a day: repeating expenses due that day (not booked yet) and expenses booked for it.
+function paymentsOn(day) {
+  const iso = F.iso(day), key = iso.slice(0, 7);
+  const last = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
+  let n = 0;
+  for (const r of db.all("repeats")) {
+    if (isOn(r, "paused") || num(r, "amount") >= 0) continue;
+    const due = Math.max(1, Math.min(num(r, "day") || 1, last));
+    if (due === day.getDate() && !bookedByHand(r, key)) n++;
+  }
+  n += db.all("transactions").filter(x => x.date === iso && num(x, "amount") < 0 && !isNeutral(x)).length;
+  return n;
 }
 
 // "3 tasks (1 overdue), 1 appointment, 🎂 1 birthday today · tomorrow 1 birthday" - kinds and counts, nothing else.
