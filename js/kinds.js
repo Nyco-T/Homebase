@@ -311,6 +311,10 @@ export function dues() {
     const due = d(r, "due");
     if (due && !isOn(r, "done")) out.push({ date: due, title: r.title, detail: r.list || "", kind: "tasks", id: r.id, lead: 0, icon: "check", color: "--today" });
   }
+  for (const r of db.all("timeoff")) {
+    const from = F.parseIso(r.from);
+    if (from) out.push({ date: from, title: (r.title || r.type || "Time off") + " starts", detail: F.shortDate(from) + " – " + F.shortDate(F.parseIso(r.to) || from), kind: "timeoff", id: r.id, lead: -1, icon: "calendar", color: "--blue" });
+  }
   for (const c of db.all("chores")) {
     out.push({ date: nextChore(c), title: c.name, detail: c.area || "", kind: "chores", id: c.id, lead: 0, icon: "sparkle", color: "--home" });
   }

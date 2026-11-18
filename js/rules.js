@@ -4,6 +4,7 @@
 import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { rule, reminder, find, NEVER, marks, setBookkeeping } from "./auto.js";
+import * as TO from "./timeoff.js";
 import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion, isNeutral, balanceOn } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -106,6 +107,24 @@ export function register() {
       const last = F.parseIso(db.setting("phonecal.last", ""));
       if (!last || F.daysBetween(last, F.today()) < 2) return [];
       return [{ date: F.today(), title: "Update your iPhone calendar", detail: "last read " + F.relative(last) + " · tap to read it", kind: "phonecal", id: null, lead: 0, icon: "phone", color: "--today" }];
+    });
+
+  reminder("tasks.bridge-days", "tasks", "Bridge days",
+    "When a public holiday falls on a Tuesday or Thursday, the bell suggests taking the Monday / Friday off (1 day gives you 4) - from 6 weeks before.", () => {
+      if (!TO.isSetUp()) return [];
+      const t = F.today();
+      return TO.bridgeDays(t, F.addDays(t, 42)).map(b => ({ date: b.bridge, title: "Bridge day: take " + F.weekday(b.bridge) + " " + F.shortDate(b.bridge) + " off",
+        detail: b.holiday.name + " – 1 day gives you 4 off", kind: "bridge", id: null, lead: 42, icon: "calendar", color: "--blue" }));
+    });
+
+  reminder("tasks.vacation-left", "tasks", "Vacation days that expire",
+    "From October: a reminder when you still have vacation days of this year (they can be used until 31 March). From January: for last year's leftover days.", () => {
+      if (!TO.isSetUp()) return [];
+      const t = F.today();
+      const bal = TO.balances();
+      const b = t.getMonth() >= 9 ? bal[t.getFullYear()] : t.getMonth() <= 2 ? bal[t.getFullYear() - 1] : null;
+      if (!b || b.left <= 0) return [];
+      return [{ date: t, title: String(b.left).replace(".", ",") + " vacation days left for " + b.year, detail: "they expire on " + F.date(b.expires) + " · tap to plan them", kind: "vacation-left", id: null, lead: 0, icon: "calendar", color: "--warn" }];
     });
 
   rule("tasks.postponed", "tasks", "Moved too often",

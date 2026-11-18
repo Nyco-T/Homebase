@@ -5,7 +5,7 @@
 const DB_NAME = "homebase";
 export const SCHEMA = 1;
 export const LISTS = ["events", "tasks", "notes", "transactions", "repeats", "shopping", "meals", "recipes", "chores",
-  "buylog", "automarks", "autolog", "dismissed", "rules"];
+  "buylog", "automarks", "autolog", "dismissed", "rules", "timeoff"];
 
 let db = null;
 const cache = {};

@@ -16,7 +16,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -38,6 +38,8 @@ export function openItem(item) {
   if (item.kind === "transactions" && !item.id) return go("money");
   if (item.kind === "phonecal") return phonecal.update();
   if (item.kind === "countcash") return money.askBalance("Cash");
+  if (item.kind === "timeoff") { const r = db.byId("timeoff", item.id); return r ? plan.timeoffSheet(r) : go("plan/timeoff"); }
+  if (["holiday", "bridge", "vacation-left"].includes(item.kind)) return go("plan/timeoff");
   if (item.kind === "confirm") { const w = waitingRepeats().find(x => x.rule.id === item.id); return w ? money.askRepeat(w) : go("money"); }   // from a tap, so the clipboard may be read
   const rec = item.id && db.byId(item.kind, item.id);
   if (rec && phonecal.isPhone(rec)) phonecal.show(rec);
