@@ -466,3 +466,30 @@ input, textarea, select, [contenteditable], code { -webkit-user-select: text; us
 .sheet, .dialog { overscroll-behavior: none; overflow-x: hidden; touch-action: pan-y; }
 .dim { touch-action: none; }
 .shopmode { overscroll-behavior: none; overflow-x: hidden; }
+
+/* iPhone-style popups: they rest at half or full height and spring between them */
+.sheet { transform: translateY(110%); transition: transform .38s cubic-bezier(.25, 1.15, .4, 1); will-change: transform; }
+.sheet.dragging { transition: none; }
+.sheet .sheethead { cursor: grab; padding-bottom: 2px; }
+.sheet .grip { width: 40px; height: 5px; }
+
+/* springy controls: buttons press in and spring back, switches bounce, picked chips pop, ticks fill from the middle */
+.btn, .chip, .fold, #tabs button, .card.mini { transition: transform .32s cubic-bezier(.3, 1.8, .5, 1), background-color .2s, color .2s; }
+.btn:active, .fold:active { transform: scale(.93); }
+.chip:active { transform: scale(.9); }
+.chip.on { animation: chipPop .34s cubic-bezier(.3, 1.9, .5, 1); }
+@keyframes chipPop { 0% { transform: scale(.9); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.switch::after { transition: left .38s cubic-bezier(.3, 1.7, .5, 1); }
+.switch { transition: background-color .2s; }
+.tick { position: relative; overflow: hidden; }
+.tick.on::before { content: ""; position: absolute; inset: -2px; border-radius: 50%; background: var(--accent); z-index: -1; animation: tickFill .34s cubic-bezier(.3, 1.6, .5, 1); }
+.tick.on { isolation: isolate; }
+@keyframes tickFill { from { transform: scale(0); } to { transform: scale(1); } }
+#tabs button:active { transform: scale(.9); }
+@media (prefers-reduced-motion: reduce) { .chip.on, .tick.on::before { animation: none; } }
+
+/* a Home card growing into its page (and back) */
+.grower { position: fixed; z-index: 25; background: var(--card); border: 1px solid var(--glass-border); border-top-color: var(--glass-edge); border-radius: 18px;
+  transition: left .32s cubic-bezier(.3, 1.08, .4, 1), top .32s cubic-bezier(.3, 1.08, .4, 1), width .32s cubic-bezier(.3, 1.08, .4, 1), height .32s cubic-bezier(.3, 1.08, .4, 1), border-radius .32s, opacity .22s;
+  pointer-events: none; }
+.grower.fade { opacity: 0; }

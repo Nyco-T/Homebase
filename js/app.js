@@ -19,7 +19,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.11.2";
+export const VERSION = "1.12.0";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "check"], ["calendar", "Calendar", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, calendar: calendarPage, money, food, more };
@@ -57,6 +57,7 @@ export function render() {
   const { tab, sub } = route();
   const page = document.getElementById("page");
   const key = location.hash;
+  state.prevKey = shownKey;   // where you came from (Home uses it to shrink a card back into place)
   page.innerHTML = "";
   PAGES[tab].render(page, sub);
   // a new page slides in softly - a redraw after a change on the same page doesn't
@@ -68,6 +69,7 @@ export function render() {
   shownKey = key;
   window.scrollTo(0, scrollMemory[key] || 0);
   updateTopbar();
+  depth();
   drawTabs(tab);
 }
 
@@ -86,12 +88,31 @@ function updateTopbar() {
   topbar.classList.toggle("show", !!h1 && y > 38);
 }
 
+// Depth: what scrolls away under the glass top bar fades and shrinks a little as its bottom reaches the bar.
+let depthFrame = 0;
+function depth() {
+  cancelAnimationFrame(depthFrame);
+  depthFrame = requestAnimationFrame(() => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const bar = document.getElementById("topbar");
+    const edge = bar && bar.classList.contains("show") ? bar.offsetHeight : 0;
+    for (const el of document.getElementById("page").children) {
+      if (el.classList.contains("fab") || el.classList.contains("head")) continue;
+      const r = el.getBoundingClientRect();
+      const f = edge ? Math.max(0, Math.min(1, (edge + 70 - r.bottom) / 110)) : 0;
+      el.style.opacity = f ? String(1 - f * 0.65) : "";
+      el.style.transform = f ? "scale(" + (1 - f * 0.05) + ")" : "";
+      el.style.transformOrigin = f ? "center bottom" : "";
+    }
+  });
+}
+
 function drawTabs(active) {
   const nav = document.getElementById("tabs");
   nav.innerHTML = "";
   const counts = badgeCounts();
   for (const [id, label, ic] of TABS) {
-    const b = h("button" + (id === active ? ".on" : ""), { onclick: () => go(id === route().tab ? id : id) }, h("span", { html: icon(ic, 24) }), label);
+    const b = h("button" + (id === active ? ".on" : ""), { onclick: () => go(id === route().tab ? id : id) }, h("span", { html: icon(ic, 24, id === active) }), label);
     if (counts[id]) b.append(h("span.badge", counts[id] > 99 ? "99+" : String(counts[id])));
     nav.append(b);
   }
@@ -196,7 +217,7 @@ async function start() {
   setDatesSource(() => reminders.all());
   db.listen(name => { if (name === "settings") applyTheme(); changed(name); });
   window.addEventListener("hashchange", () => { render(); });
-  window.addEventListener("scroll", () => { scrollMemory[location.hash] = window.scrollY; updateTopbar(); }, { passive: true });
+  window.addEventListener("scroll", () => { scrollMemory[location.hash] = window.scrollY; updateTopbar(); depth(); }, { passive: true });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !isOpen()) { runAuto(); redraw(); notifyToday(); }
   });

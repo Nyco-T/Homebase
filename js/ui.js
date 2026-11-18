@@ -32,8 +32,27 @@ const P = {
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
 };
 
-export function icon(name, size = 22) {
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${P[name] || '<circle cx="12" cy="12" r="4"/>'}</svg>`;
+// The main icons in one drawn style: rounded, outlined - and filled for the page you're on (tab bar).
+// Details on a filled icon are "cut out" in the background colour.
+const CUT = 'stroke="var(--bg)"';
+const MAIN = {
+  home: [`<path d="M3.5 11L12 4l8.5 7v9.5h-6v-6h-5v6h-6z"/>`,
+         `<path d="M3.5 11L12 4l8.5 7v9.5h-6v-6h-5v6h-6z" fill="currentColor"/>`],
+  check: [`<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8.5 12.2l2.4 2.4 4.8-5"/>`,
+          `<rect x="4" y="4" width="16" height="16" rx="5" fill="currentColor"/><path d="M8.5 12.2l2.4 2.4 4.8-5" ${CUT} stroke-width="2.2"/>`],
+  calendar: [`<rect x="3.5" y="5" width="17" height="15.5" rx="4"/><path d="M3.5 10h17M8 3v4M16 3v4"/>`,
+             `<rect x="3.5" y="5" width="17" height="15.5" rx="4" fill="currentColor"/><path d="M3.5 10h17" ${CUT}/><path d="M8 3v4M16 3v4"/>`],
+  wallet: [`<rect x="3" y="6" width="18" height="14" rx="4"/><path d="M6 6l9-2.5L16.5 6"/><circle cx="16.5" cy="13" r="1.3" fill="currentColor"/>`,
+           `<rect x="3" y="6" width="18" height="14" rx="4" fill="currentColor"/><path d="M6 6l9-2.5L16.5 6"/><circle cx="16.5" cy="13" r="1.5" fill="var(--bg)" stroke="none"/>`],
+  cart: [`<path d="M3 5h2.5l2 10h11l2-7.5H6.5"/><circle cx="9" cy="19" r="1.4" fill="currentColor"/><circle cx="17" cy="19" r="1.4" fill="currentColor"/>`,
+         `<path d="M3 5h2.5l2 10h11l2-7.5H6.5"/><path d="M7 8h13l-1.8 6.5H8.4z" fill="currentColor"/><circle cx="9" cy="19" r="1.6" fill="currentColor"/><circle cx="17" cy="19" r="1.6" fill="currentColor"/>`],
+  more: [`<circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/>`,
+         `<circle cx="5" cy="12" r="2.3" fill="currentColor"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/><circle cx="19" cy="12" r="2.3" fill="currentColor"/>`],
+};
+
+export function icon(name, size = 22, filled = false) {
+  const body = MAIN[name] ? MAIN[name][filled ? 1 : 0] : (P[name] || '<circle cx="12" cy="12" r="4"/>');
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
 // h("div.card", {onclick}, child, "text", …) - a tiny element builder.
@@ -149,30 +168,72 @@ function holdStill(dim, box) {
   }, { passive: false });
 }
 
+// A popup from the bottom, like on the iPhone: a tall one opens at half height - drag it up (or start scrolling,
+// or tap a field) for full height, drag it down to close. A short one opens fully. Only real scrolling inside a full
+// popup scrolls; pulling it down at the top moves the popup instead of bouncing.
 export function sheet(title, content, { actions = [], onClose } = {}) {
   const dim = h("div.dim");
-  // only the top bar (grip + title) closes the sheet with a swipe down - scrolling the content never does
   const head = h("div.sheethead", h("div.grip"), title ? h("h3.serif", title) : null);
   const box = h("div.sheet", head, content,
     actions.length ? h("div.actions", actions) : null);
   layer().append(dim, box);
   holdStill(dim, box);
   openCount++;
-  requestAnimationFrame(() => { dim.classList.add("in"); box.classList.add("in"); });
+  const vh = window.innerHeight;
+  const fullH = box.offsetHeight;
+  const halfY = fullH > vh * 0.62 ? Math.round(fullH - vh * 0.55) : 0;   // how far down the half position is
+  let y = halfY;                                                          // where it rests now (0 = full)
+  const place = (to, animate = true) => {
+    box.classList.toggle("dragging", !animate);
+    box.style.transform = "translateY(" + Math.max(0, to) + "px)";
+  };
+  box.style.transform = "translateY(" + (fullH + 40) + "px)";
+  void box.offsetHeight;   // start below the screen, then glide up (no waiting for a frame)
+  dim.classList.add("in"); box.classList.add("in"); place(y);
   let closed = false;
   const close = () => {
     if (closed) return;
     closed = true;
     openCount--;
-    dim.classList.remove("in"); box.classList.remove("in");
-    setTimeout(() => { dim.remove(); box.remove(); }, 230);
+    dim.classList.remove("in");
+    box.classList.remove("dragging");
+    box.style.transform = "translateY(" + (box.offsetHeight + 40) + "px)";
+    setTimeout(() => { dim.remove(); box.remove(); }, 300);
     onClose && onClose();
   };
   dim.addEventListener("click", close);
-  let startY = null;
-  head.addEventListener("touchstart", e => { startY = e.touches[0].clientY; }, { passive: true });
-  head.addEventListener("touchmove", e => { if (startY != null && e.touches[0].clientY - startY > 70) { startY = null; close(); } }, { passive: true });
-  head.addEventListener("touchend", () => { startY = null; }, { passive: true });
+  // where it goes after a drag: full, half (if it has one) or closed
+  const settle = (at, velocity) => {
+    if (velocity > 0.9 || at > (halfY || 0) + Math.min(160, box.offsetHeight * 0.3)) return close();
+    y = halfY && at > halfY / 2 && velocity > -0.6 ? halfY : 0;
+    place(y);
+  };
+  let startY = null, startT = 0, base = 0, dragging = false;
+  const begin = e => { startY = e.touches[0].clientY; startT = Date.now(); base = y; dragging = false; };
+  // the top bar always drags the popup
+  head.addEventListener("touchstart", e => { begin(e); dragging = true; }, { passive: true });
+  // the content drags it while it's at half height, or when pulled down at the top of a full popup
+  box.addEventListener("touchstart", e => { if (!head.contains(e.target)) begin(e); }, { passive: true });
+  box.addEventListener("touchmove", e => {
+    if (startY == null) return;
+    const dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dy) < 6) return;
+      dragging = (y > 0) || (dy > 0 && box.scrollTop <= 0);
+      if (!dragging) { startY = null; return; }   // a normal scroll inside the full popup
+    }
+    e.preventDefault();
+    place(base + dy, false);
+  }, { passive: false });
+  box.addEventListener("touchend", e => {
+    if (startY == null) return;
+    const dy = e.changedTouches[0].clientY - startY;
+    const v = dy / Math.max(1, Date.now() - startT);
+    startY = null;
+    if (dragging) settle(base + dy, v);
+  }, { passive: true });
+  // typing needs room: a field gets the full height
+  box.addEventListener("focusin", e => { if (y > 0 && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) { y = 0; place(0); } });
   return { el: box, close };
 }
 

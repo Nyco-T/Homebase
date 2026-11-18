@@ -3,7 +3,7 @@
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, tickBox, btn, sheet, toast, empty, confetti } from "../ui.js";
+import { h, icon, tile, tickBox, btn, sheet, toast, empty, confetti, calm } from "../ui.js";
 import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isNeutral, balanceOn, accountIcon, dueText, byDue } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
@@ -59,6 +59,7 @@ export function render(root) {
   const waiting = waitingBlock();   // "Did your salary arrive?"
   if (waiting) root.append(waiting);
   root.append(h("div.minigrid", moneyMini(), shoppingMini(), comingMini(), tonightMini()));
+  shrinkBack(root);
 }
 
 // one slim line: the first suggestion with its yes, and how many more
@@ -74,7 +75,38 @@ function automationLine() {
 
 // a small card: what it is, one big value, one line - tap opens the page
 function mini(label, value, meta, link, valueClass = "") {
-  return h("div.card.mini", { onclick: () => go(link) }, h("div.small.muted", label), h("div.mval.serif" + valueClass, value), meta ? h("div.small.muted", meta) : null);
+  const c = h("div.card.mini", { "data-link": link }, h("div.small.muted", label), h("div.mval.serif" + valueClass, value), meta ? h("div.small.muted", meta) : null);
+  c.addEventListener("click", () => grow(c, link));
+  return c;
+}
+
+// Like the App Store: the tapped card grows into its page - and coming back to Home it shrinks into its place again.
+let grown = null;
+const growerAt = r => ({ left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+function grow(card, link) {
+  if (calm()) return go(link);
+  const g = h("div.grower");
+  Object.assign(g.style, growerAt(card.getBoundingClientRect()));
+  document.body.append(g);
+  grown = link;
+  void g.offsetHeight;   // start at the card, then grow
+  Object.assign(g.style, { left: "0px", top: "0px", width: innerWidth + "px", height: innerHeight + "px", borderRadius: "0px" });
+  setTimeout(() => { go(link); g.classList.add("fade"); setTimeout(() => g.remove(), 240); }, 300);
+}
+function shrinkBack(root) {
+  if (!grown || calm() || !(state.prevKey || "").startsWith("#" + grown)) { grown = null; return; }
+  const link = grown;
+  grown = null;
+  setTimeout(() => {   // once Home is on screen
+    const card = root.querySelector('.card.mini[data-link="' + link + '"]');
+    if (!card) return;
+    const g = h("div.grower");
+    Object.assign(g.style, { left: "0px", top: "0px", width: innerWidth + "px", height: innerHeight + "px", borderRadius: "0px" });
+    document.body.append(g);
+    void g.offsetHeight;
+    Object.assign(g.style, { ...growerAt(card.getBoundingClientRect()), borderRadius: "18px" });
+    setTimeout(() => { g.classList.add("fade"); setTimeout(() => g.remove(), 200); }, 320);
+  }, 0);
 }
 
 function moneyMini() {
