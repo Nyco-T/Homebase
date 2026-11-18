@@ -2,7 +2,7 @@
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask } from "../ui.js";
+import { h, icon, tile, btn, seg, toast, empty, section, sheet, dialog, ask, calm } from "../ui.js";
 import { d, num, isOn, guessCategory, names, splitEntry, isCorrection, isNeutral, isTransfer, balanceOn, setBalance, waitingRepeats, waitQuestion, confirmRepeat, undoRepeat, notYetRepeat, accounts, accountOf, accountIcon, moveMoney, transferPair, guessAccount } from "../kinds.js";
 import { editRecord, newRecord, calcField, choiceChips, usedMost } from "../form.js";
 import { forecast } from "../rules.js";
@@ -226,7 +226,7 @@ function walletStack(t, upTo, current) {
       h("div.whead", tile(accountIconName(a), accountColor(a)),
         h("div", { style: { flex: "1", minWidth: "0" } }, h("div.wname", a || "All accounts"), label ? h("div.caps", label) : null),
         front ? null : h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "16px" } }, F.signedMoney(bal))),
-      front ? h("div.wbal.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal)) : null,
+      front ? rollingBalance(a, upTo, bal) : null,
       meta ? h("div.wmeta", meta) : null);
     el.style.setProperty("--wc", "var(" + accountColor(a) + ")");
     return el;
@@ -259,6 +259,29 @@ function walletStack(t, upTo, current) {
     return d;
   }), h("button", { onclick: addAccount, "aria-label": "Add an account" }, "+ Account"));
   return [box, dots];
+}
+
+// The big balance on the front card counts to its new value (about half a second) when it changed since you last
+// saw it - not on every redraw, not when you switch cards or months, and not with "Reduce Motion" on.
+const lastBalance = new Map();   // "account|day" -> the value shown last time
+function rollingBalance(account, day, bal) {
+  const key = (account || "") + "|" + F.iso(day);
+  const from = lastBalance.get(key);
+  lastBalance.set(key, bal);
+  const el = h("div.wbal.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal));
+  if (from == null || Math.abs(from - bal) < 0.005 || calm()) return el;
+  el.textContent = F.signedMoney(from);
+  const start = Date.now(), ms = 550;
+  const done = () => { el.textContent = F.signedMoney(bal); };
+  const step = () => {
+    const p = Math.min(1, (Date.now() - start) / ms);
+    if (p >= 1 || !el.isConnected && p > 0) return done();
+    el.textContent = F.signedMoney(Math.round((from + (bal - from) * (1 - Math.pow(1 - p, 3))) * 100) / 100);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  setTimeout(done, ms + 150);   // the end value for sure, even if the phone paused the animation
+  return el;
 }
 
 // "Set balance" / "Count cash": type what's really there, the difference becomes a correction (not income or spending).

@@ -9,7 +9,9 @@ import { toBuy, onList } from "./cook.js";
 import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion, isNeutral, balanceOn } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
-const step = text => ({ text, done: false });
+// "Anna's birthday", "Geburtstag Anna", "Birthday of Anna" -> "Anna" (else the whole title)
+const birthdayName = title => (title || "").replace(/['’]s\s+birthday/i, "").replace(/\b(birthday|geburtstag)\b(\s+(of|von)\b)?/ig, "")
+  .replace(/\s+\d+(\.|th|st|nd|rd)?\s*$/i, "").replace(/^[\s:·–-]+|[\s:·–-]+$/g, "").trim() || title || "someone";
 const inMonth = (rec, y, m) => { const x = d(rec, "date"); return x && x.getFullYear() === y && x.getMonth() === m; };
 
 // Rent, savings, transfers, salary … aren't everyday spending.
@@ -143,17 +145,19 @@ export function register() {
     });
 
   rule("tasks.birthday-gift", "tasks", "Gift task before birthdays",
-    "10 days before a birthday in your calendar (a yearly event of the kind Birthday): a task to get a gift.", 2, 3, () => {
+    "7 days before a birthday in your calendar (an event of the kind Birthday): a task “Gift for …”, due 2 days before it.", 2, 3, () => {
       const out = [];
       for (const e of db.all("events")) {
         const lower = (e.title || "").toLowerCase();
         const birthday = e.category === "Birthday" || lower.includes("birthday") || lower.includes("geburtstag");
         const next = nextEvent(e);
-        if (!birthday || !next || next > F.addDays(F.today(), 10)) continue;
-        const due = F.addDays(next, -3) < F.today() ? F.today() : F.addDays(next, -3);
-        out.push(find("bday-gift:" + e.id + ":" + next.getFullYear(), "Task: gift for " + e.title, F.dayDate(next) + " (" + F.relative(next) + ")", "Add task",
-          tx => tx.add("tasks", { title: "Gift: " + e.title + " (" + F.shortDate(next) + ")", due: F.iso(due), priority: "Normal", list: "Personal", repeat: "Never", done: false,
-            steps: [step("Get a gift"), step("Write a card / message")], notes: e.notes || undefined })));
+        if (!birthday || !next || next < F.today() || next > F.addDays(F.today(), 7)) continue;
+        const due = F.addDays(next, -2) < F.today() ? F.today() : F.addDays(next, -2);
+        const name = birthdayName(e.title);
+        // (same key as before - a birthday that already got its gift task doesn't get a second one)
+        out.push(find("bday-gift:" + e.id + ":" + next.getFullYear(), "Gift for " + name + " · due " + F.dayDate(due), "birthday " + F.dayDate(next) + " (" + F.relative(next) + ")", "Add task",
+          tx => tx.add("tasks", { title: "Gift for " + name, due: F.iso(due), priority: "Normal", list: "Errands", repeat: "Never", done: false,
+            notes: ("Birthday " + F.dayDate(next) + "\n" + (e.notes || "")).trim() })));
       }
       return out;
     });
