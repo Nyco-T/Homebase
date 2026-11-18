@@ -57,6 +57,23 @@ function entries(root) {
       onclick: () => acct === "Cash" ? askBalance("Cash") : moveDialog() })) : null,
     current && !acct && db.all("transactions").length ? (() => { const f = forecast(); return h("div.small" + (f.end < 0 ? ".red" : ".muted"), { style: { textAlign: "center", marginTop: "10px" } }, "Month end ≈ " + F.signedMoney(f.end)); })() : null,
     current ? null : h("div", { style: { textAlign: "center", marginTop: "8px" } }, btn("Back to " + F.monthName(t.getFullYear(), t.getMonth()), { kind: "ghost", small: true, onclick: () => { month = new Date(t.getFullYear(), t.getMonth(), 1); go("money"); } })));
+  // swipe the month box left / right for the next / previous month; dots show where you are (last 6 months)
+  const dots = h("div.mdots");
+  for (let k = 5; k >= 0; k--) {
+    const mk = new Date(t.getFullYear(), t.getMonth() - k, 1);
+    dots.append(h("i" + (mk.getFullYear() === y && mk.getMonth() === m ? ".on" : "")));
+  }
+  hero.append(dots);
+  let sx = null, sy = null;
+  hero.addEventListener("touchstart", e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  hero.addEventListener("touchmove", e => { if (sx == null) return; const dx = e.touches[0].clientX - sx; if (Math.abs(dx) > Math.abs(e.touches[0].clientY - sy)) hero.style.transform = "translateX(" + dx / 3 + "px)"; }, { passive: true });
+  hero.addEventListener("touchend", e => {
+    if (sx == null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    sx = null; hero.style.transform = "";
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    month = new Date(y, m + (dx < 0 ? 1 : -1), 1); catFilter = null; go("money");
+  }, { passive: true });
   root.append(hero);
   if (current) { const w = waitingBlock(); if (w) root.append(w); const f = favouritesRow(); if (f) root.append(f); }
 
@@ -96,7 +113,9 @@ function entries(root) {
   const dayBlock = day => {
     const dd = F.parseIso(day), list = byDay[day];
     const label = dd.getTime() === t.getTime() ? "Today · " : dd.getTime() === yesterday ? "Yesterday · " : "";
-    return [section(label + F.dayDate(dd), F.signedMoney(dayTotal(list))), entryList(list)];
+    const sec = section(label + F.dayDate(dd), F.signedMoney(dayTotal(list))), lst = entryList(list);
+    if (dd.getTime() === t.getTime()) { sec.classList.add("today"); lst.classList.add("today"); }
+    return [sec, lst];
   };
   for (const day of days.slice(0, openCount)) root.append(...dayBlock(day));
   const folded = days.slice(openCount);

@@ -1,4 +1,5 @@
-// Home: today at a glance - quick add, automation, today, coming up, money, shopping list, meals.
+// Home, calm: quick add, a big Today card, one slim automation line (only when there's something), the questions that
+// wait for your yes, and four small cards - Money, Shopping, Coming up, Tonight - that open their page.
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
@@ -10,6 +11,7 @@ import * as reminders from "../reminders.js";
 import { forecast } from "../rules.js";
 import { go, openItem, state, installUpdate } from "../app.js";
 import { waitingBlock } from "./money.js";
+import { priceFor } from "../shopmode.js";
 
 function greeting() {
   const hr = new Date().getHours();
@@ -51,32 +53,70 @@ export function render(root) {
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); input.blur(); } });
   root.append(h("div.quick", input, btn("Add", { kind: "primary", icon: "plus", onclick: add })));
 
-  root.append(automationCard(), todayCard(), comingUpCard(), moneyCard(), shoppingCard(), mealsCard());
+  root.append(todayCard());
+  const line = automationLine();
+  if (line) root.append(line);
+  const waiting = waitingBlock();   // "Did your salary arrive?"
+  if (waiting) root.append(waiting);
+  root.append(h("div.minigrid", moneyMini(), shoppingMini(), comingMini(), tonightMini()));
 }
 
-function automationCard() {
+// one slim line: the first suggestion with its yes, and how many more
+function automationLine() {
   const pending = auto.suggestions();
-  const c = card("Automation", "bolt", "--accent", "more/automation");
-  if (pending.length) {
-    for (const p of pending.slice(0, 3)) {
-      c.append(row(tile(auto.AREAS[p.rule.area].icon, auto.AREAS[p.rule.area].color), p.finding.title, p.finding.detail,
-        h("div", { style: { display: "flex", gap: "4px" } },
-          btn(p.finding.yes, { kind: "soft", small: true, onclick: e => { e.stopPropagation(); auto.accept(p); toast("Done: " + p.finding.title); } }),
-          h("button.btn.ghost.small", { html: icon("x", 16), onclick: e => { e.stopPropagation(); auto.decline(p); } }))));
-    }
-    if (pending.length > 3) c.append(h("div.small.muted", "+" + (pending.length - 3) + " more suggestions"));
-    return c;
-  }
-  const today = F.todayIso();
-  const done = db.all("autolog").filter(r => (r.time || "").startsWith(today) && !r.undone);
-  if (!done.length) { c.append(h("div.small.muted", "Homebase watches your lists and does the routine work by itself. Nothing to do right now.")); return c; }
-  for (const r of done.slice(-3).reverse()) c.append(row(tile(auto.AREAS[r.area]?.icon || "bolt", auto.AREAS[r.area]?.color || "--accent"), r.text, (r.time || "").slice(11, 16)));
+  if (!pending.length) return null;
+  const p = pending[0];
+  return h("div.autoline", { onclick: () => go("more/automation") },
+    h("span", { html: icon("bolt", 17) }),
+    h("div.grow", h("div.title", p.finding.title), pending.length > 1 ? h("div.meta", "+" + (pending.length - 1) + " more suggestions") : null),
+    btn(p.finding.yes, { kind: "soft", small: true, onclick: e => { e.stopPropagation(); auto.accept(p); toast("Done: " + p.finding.title); } }));
+}
+
+// a small card: what it is, one big value, one line - tap opens the page
+function mini(label, value, meta, link, valueClass = "") {
+  return h("div.card.mini", { onclick: () => go(link) }, h("div.small.muted", label), h("div.mval.serif" + valueClass, value), meta ? h("div.small.muted", meta) : null);
+}
+
+function moneyMini() {
+  const t = F.today();
+  const bal = balanceOn(t);
+  const meta = db.all("transactions").length ? "end ≈ " + F.moneyShort(forecast().end) : "tap to add an entry";
+  return mini("Money", F.signedMoney(bal), meta, "money", bal < 0 ? ".red" : "");
+}
+
+function shoppingMini() {
+  const open = db.all("shopping").filter(s => !s.done);
+  const sum = open.reduce((a, s) => a + (priceFor(s) || 0), 0);
+  return mini("Shopping", open.length ? F.plural(open.length, "item", "items") : "All bought", open.length ? (sum > 0 ? "≈ " + (sum < 20 ? F.money(sum) : F.moneyShort(sum)) : "tap to start") : "list is empty", "food/shopping");
+}
+
+function comingMini() {
+  const t = F.today();
+  // money (salary, rent …) isn't listed ahead here - it shows in Money on its day
+  const items = reminders.between(F.addDays(t, 1), F.addDays(t, 14)).filter(x => !["backup", "transactions", "repeats", "bridge", "vacation-left"].includes(x.kind))
+    .sort((a, b) => a.date - b.date || (a.time || "99").localeCompare(b.time || "99"));
+  if (!items.length) return mini("Coming up", "Nothing", "in the next 2 weeks", "calendar");
+  const x = items[0];
+  const c = mini("Coming up", "", F.relative(x.date) + (x.time ? " " + x.time : "") + (items.length > 1 ? " · +" + (items.length - 1) : ""), "calendar");
+  c.querySelector(".mval").replaceWith(h("div.mtitle", x.title));
+  return c;
+}
+
+function tonightMini() {
+  const t = F.todayIso();
+  const order = { Dinner: 0, Lunch: 1, Snack: 2, Breakfast: 3 };
+  const today = db.all("meals").filter(m => m.date === t).sort((a, b) => (order[a.slot] ?? 4) - (order[b.slot] ?? 4));
+  if (!today.length) return mini("Tonight", "Nothing", "plan a meal", "food/meals");
+  const m = today[0];
+  const r = m.recipe ? db.byId("recipes", m.recipe) : null;
+  const c = mini(m.slot === "Dinner" || !m.slot ? "Tonight" : m.slot, "", r && r.minutes ? r.minutes + " min" : (m.slot || ""), "food/meals");
+  c.querySelector(".mval").replaceWith(h("div.mtitle", m.title));
   return c;
 }
 
 function todayCard() {
   const t = F.today();
-  const c = card("Today", "check", "--today", "plan/tasks");
+  const c = h("div.card.todaycard");
   const tasks = db.all("tasks").filter(x => !isOn(x, "done") && d(x, "due") && d(x, "due") <= t)
     .sort(byDue);
   const events = db.all("events").filter(e => { const n = nextEvent(e); return n && n.getTime() === t.getTime(); });
@@ -89,6 +129,8 @@ function todayCard() {
   }
   for (const x of chores) c.append(row(tile("sparkle", "--home"), x.name, (x.area || "") + " · due " + F.relative(nextChore(x)),
     btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); cheerIfClear(x.name + " done"); } }), () => openItem({ kind: "chores", id: x.id })));
+  const left = tasks.length + chores.length;
+  c.prepend(h("div.cardhead", { onclick: () => go("plan/tasks") }, h("h2", { style: { fontSize: "18px" } }, "Today"), h("span.small.muted", left ? left + " left" : "")));
   if (!tasks.length && !events.length && !chores.length) c.append(h("div.small.muted", "Nothing for today. Type “todo call mum fri” above to plan something."));
   return c;
 }
@@ -117,70 +159,6 @@ export function undoTask(x) {
   if (copy && x.repeat && x.repeat !== "Never") list.splice(list.indexOf(copy), 1);
   db.touch(x);
   db.save("tasks");
-}
-
-function comingUpCard() {
-  const t = F.today();
-  // money (salary, rent …) isn't listed ahead here - it shows in Money on its day and stays there
-  const items = reminders.between(F.addDays(t, 1), F.addDays(t, 14)).filter(x => !["backup", "transactions", "repeats"].includes(x.kind));
-  const c = card("Coming up", "calendar", "--today", "calendar");
-  if (!items.length) { c.append(h("div.small.muted", "Nothing in the next two weeks. Add an event like “termin Zahnarzt 24.11.” or a birthday.")); return c; }
-  for (const x of items.slice(0, 6)) c.append(row(tile(x.icon, x.color), x.title, x.detail, h("span.small.muted", F.relative(x.date)), () => openItem(x)));
-  if (items.length > 6) c.append(h("div.small.muted", "+" + (items.length - 6) + " more in the calendar"));
-  return c;
-}
-
-function moneyCard() {
-  const t = F.today();
-  const month = db.all("transactions").filter(x => { const dd = d(x, "date"); return dd && dd.getFullYear() === t.getFullYear() && dd.getMonth() === t.getMonth() && dd <= t; });
-  const real = month.filter(x => !isNeutral(x));   // corrections and cash withdrawals aren't income or spending
-  const income = real.map(x => num(x, "amount")).filter(v => v > 0).reduce((a, b) => a + b, 0);
-  const spent = -real.map(x => num(x, "amount")).filter(v => v < 0).reduce((a, b) => a + b, 0);
-  const bal = balanceOn(t);   // the total you have, carried over
-  const c = card("Money this month", "wallet", "--money", "money");
-  const waiting = waitingBlock();   // "Did your salary arrive?"
-  if (waiting) { waiting.classList.remove("card"); waiting.style.marginBottom = "10px"; c.append(waiting); }
-  c.append(h("div.stats", { style: { marginBottom: "6px" } },
-    h("div", h("div.caps", "Balance"), h("div.v.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal))),
-    h("div", h("div.caps", "Income"), h("div.v.serif.greenc", F.money(income))),
-    h("div", h("div.caps", "Expenses"), h("div.v.serif.red", F.money(spent)))));
-  // Bank and Cash on their own, once you use Cash
-  if (db.all("transactions").some(x => x.account && x.account !== "Bank")) {
-    const accs = [...new Set(["Bank", ...db.all("transactions").map(x => x.account).filter(Boolean)])];
-    c.append(h("div.small.muted", { style: { marginBottom: "4px" } }, accs.map(a => accountIcon(a) + " " + a + " " + F.money(balanceOn(t, a))).join("   ")));
-  }
-  if (db.all("transactions").length) {
-    const f = forecast();
-    c.append(h("div.small" + (f.end < 0 ? ".red" : ".muted"), "Month end ≈ " + F.signedMoney(f.end)));
-  }
-  return c;
-}
-
-function shoppingCard() {
-  const open = db.all("shopping").filter(s => !s.done);
-  const c = card("Shopping list", "cart", "--home", "food/shopping");
-  if (!open.length) { c.append(h("div.small.muted", db.all("shopping").length ? "All bought." : "Type “buy milk, bread” above to start your list.")); return c; }
-  for (const s of open.slice(0, 5)) {
-    c.append(row(tickBox(false, () => { s.done = true; db.touch(s); db.save("shopping"); toast("Bought: " + s.item, "Undo", () => { s.done = false; db.touch(s); db.save("shopping"); }); }),
-      s.item, [s.qty, s.store].filter(Boolean).join(" · ")));
-  }
-  if (open.length > 5) c.append(h("div.small.muted", "+" + (open.length - 5) + " more on the list"));
-  return c;
-}
-
-function mealsCard() {
-  const t = F.today();
-  const order = { Breakfast: 0, Lunch: 1, Dinner: 2, Snack: 3 };
-  const coming = db.all("meals").filter(m => { const dd = d(m, "date"); return dd && dd >= t && dd <= F.addDays(t, 6); })
-    .sort((a, b) => a.date.localeCompare(b.date) || (order[a.slot] ?? 4) - (order[b.slot] ?? 4));
-  const c = card("Meals", "grid", "--home", "food/meals");
-  if (!coming.length) { c.append(h("div.small.muted", db.all("recipes").length ? "Nothing planned this week yet." : "Save a few recipes, then plan your week.")); return c; }
-  for (const m of coming.slice(0, 5)) {
-    const dd = d(m, "date");
-    const when = dd.getTime() === t.getTime() ? "Today" : dd.getTime() === F.addDays(t, 1).getTime() ? "Tomorrow" : F.dayDate(dd);
-    c.append(row(tile("pot", "--home"), m.title, when + (m.slot ? " · " + m.slot : ""), null, () => go("food/meals")));
-  }
-  return c;
 }
 
 // The bell: what needs you now. Tap to open, × to hide.

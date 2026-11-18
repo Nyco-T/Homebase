@@ -77,7 +77,9 @@ function tasks(root) {
     for (const [name, test] of groups) {
       const items = shown.filter(test).sort((a, b) => byDue(a, b) || prio(a) - prio(b));
       if (!items.length) continue;
-      root.append(section(name + " · " + items.length));
+      const sec = section(name + " · " + items.length);
+      if (name === "Today") sec.classList.add("today");
+      root.append(sec);
       root.append(list(items.map(taskRow)));
     }
   }
@@ -158,7 +160,9 @@ export function calendar(root) {
 
   // the day: everything by time (appointments and tasks mixed), all-day things at the end; tasks tick off right here
   const dayItems = (byDay[F.iso(calDay)] || []).slice().sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
-  root.append(section(F.weekday(calDay) + ", " + F.date(calDay), F.relative(calDay)));
+  const daySec = section(F.weekday(calDay) + ", " + F.date(calDay), F.relative(calDay));
+  if (calDay.getTime() === t.getTime()) daySec.classList.add("today");
+  root.append(daySec);
   if (!dayItems.length) root.append(h("div.list", h("div.row", h("div.grow.muted", "Nothing on this day."))));
   else root.append(list(dayItems.map(x => {
     const task = x.kind === "tasks" ? db.byId("tasks", x.id) : null;
