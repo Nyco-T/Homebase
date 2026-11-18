@@ -17,6 +17,8 @@ import * as reminders from "./reminders.js";
 import { isOn, d, nextChore, nextEvent } from "./kinds.js";
 
 const SERVER = "https://ntfy.sh/";
+// the glass house, shown as a picture on the right of the notification (a public file of the app - no personal data)
+const ICON = "https://nyco-t.github.io/Homebase/icons/icon-192.png";
 const AHEAD_MS = 3 * 24 * 3600 * 1000 - 60 * 1000;   // ntfy.sh schedules at most 3 days ahead
 const MAX_PER_RUN = 25;                                // stay well inside ntfy.sh's limits
 
@@ -117,7 +119,8 @@ function summary(day, morning) {
 // ---------------- Sending ----------------
 
 async function publish(topic, n) {
-  const q = new URLSearchParams({ title: n.title, at: String(Math.floor(n.when.getTime() / 1000)), tags: n.tags || "bell" });
+  // no "tags": ntfy would put its own emoji in front of the title - the message already has one
+  const q = new URLSearchParams({ title: n.title, at: String(Math.floor(n.when.getTime() / 1000)), attach: ICON, filename: "Homebase.png" });
   const r = await fetch(SERVER + encodeURIComponent(topic) + "?" + q, { method: "POST", body: n.text, headers: { "Content-Type": "text/plain" } });
   if (!r.ok) throw new Error("ntfy " + r.status);
 }
@@ -146,7 +149,7 @@ export async function schedule() {
 
 export async function test() {
   const c = conf();
-  await publish(c.topic, { title: "Homebase", text: "🔔 Test - notifications work", tags: "bell", when: new Date(Date.now() + 12000) });
+  await publish(c.topic, { title: "Homebase", text: "Test - notifications work", when: new Date(Date.now() + 12000) });
 }
 
 // After changing a setting: what's newly planned gets scheduled (already scheduled ones can't be taken back).
