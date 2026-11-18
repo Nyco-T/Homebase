@@ -38,25 +38,16 @@ function entries(root) {
   // the total you have, carried over from earlier months (up to today, or the end of an earlier month)
   const monthEnd = new Date(y, m + 1, 0);
   const upTo = monthEnd < t ? monthEnd : t;
-  const bal = balanceOn(upTo, acct);
 
-  // the accounts: All · Bank · Cash (+ to add one) - each with what's in it
-  const accs = accounts();
-  root.append(h("div.chips",
-    h("button.chip" + (!acct ? ".on" : ""), { onclick: () => { acct = null; catFilter = null; go("money"); } }, "All " + F.moneyShort(balanceOn(t))),
-    accs.map(a => h("button.chip" + (acct === a ? ".on" : ""), { onclick: () => { acct = acct === a ? null : a; catFilter = null; go("money"); } },
-      accountIcon(a) + " " + a + " " + F.moneyShort(balanceOn(t, a)))),
-    h("button.chip", { onclick: addAccount, "aria-label": "Add an account" }, "+")));
+  // your accounts as wallet cards (All in front by default) - the balance lives on the card
+  root.append(...walletStack(t, upTo, current));
 
-  // the month and its balance - big, one glance
-  const hero = h("div.card", { style: { padding: "12px 16px 14px" } },
-    h("div", { style: { display: "flex", alignItems: "center", marginBottom: "6px" } },
+  // the month: income and expenses (of the card in front), totals, month end
+  const hero = h("div.card", { style: { padding: "10px 16px 14px" } },
+    h("div", { style: { display: "flex", alignItems: "center", marginBottom: "8px" } },
       h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { month = new Date(y, m - 1, 1); catFilter = null; go("money"); } }),
-      h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m)),
+      h("div.caps", { style: { flex: "1", textAlign: "center" } }, F.monthName(y, m) + (acct ? " · " + acct : "")),
       h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { month = new Date(y, m + 1, 1); catFilter = null; go("money"); } })),
-    h("div.caps", { style: { textAlign: "center" } }, (acct ? accountIcon(acct) + " " + acct : "Balance") + (current ? " · you have" : " on " + F.date(upTo))),
-    h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "38px", textAlign: "center", margin: "2px 0 0" }, onclick: () => askBalance(acct || "Bank") }, F.signedMoney(bal)),
-    h("div.small.faint", { style: { textAlign: "center", marginBottom: "10px" }, onclick: () => askBalance(acct || "Bank") }, acct ? "tap to set" : "tap to set your Bank balance"),
     h("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", textAlign: "center" } },
       h("div", h("div.caps", "Income"), h("div.serif.greenc", { style: { fontSize: "19px" } }, F.money(inc))),
       h("div", h("div.caps", "Expenses"), h("div.serif.red", { style: { fontSize: "19px" } }, F.money(out)))),
@@ -163,6 +154,60 @@ function totalsBlock() {
       first ? h("div.small.faint", { style: { marginTop: "4px" } }, "since " + F.date(F.parseIso(first))) : null);
   }
   return box;
+}
+
+// ---------------- Wallet cards ----------------
+const accountColor = a => !a ? "--accent" : a === "Bank" ? "--blue" : a === "Cash" ? "--money" : /sav|spar/i.test(a) ? "--home" : /paypal/i.test(a) ? "--notes" : "--today";
+const accountIconName = a => !a ? "wallet" : a === "Bank" ? "bank" : a === "Cash" ? "cash" : /sav|spar/i.test(a) ? "pig" : "wallet";
+
+// The stack: the chosen card in front (tap it to set / count its balance, swipe it to the next one),
+// the others peek out above it (tap one to bring it to the front), dots + "Account" below.
+function walletStack(t, upTo, current) {
+  const list = [null, ...accounts()];
+  const back = list.filter(a => a !== acct);
+  const PEEK = 48, H = 128;   // a back card shows its whole top line (icon, name, balance)
+  const pick = a => { acct = a; catFilter = null; go("money"); };
+  const box = h("div.wallet", { style: { height: (back.length * PEEK + H) + "px" } });
+  const make = (a, front) => {
+    const bal = balanceOn(front ? upTo : t, a || undefined);
+    const checked = F.parseIso(db.setting("cashChecked", ""));
+    const label = !a ? (current || !front ? "Balance · you have" : "Balance on " + F.date(upTo)) : !front ? "" : a === "Cash" ? "Tap to count" : "Tap to set";
+    const meta = !front ? null : !a ? accounts().join(" + ") : a === "Bank" ? "main account" : a === "Cash" ? (checked ? "counted " + F.relative(checked) : "count it once") : "";
+    const el = h("div.wcard" + (front ? ".front" : ""),
+      h("div.whead", tile(accountIconName(a), accountColor(a)),
+        h("div", { style: { flex: "1", minWidth: "0" } }, h("div.wname", a || "All accounts"), label ? h("div.caps", label) : null),
+        front ? null : h("div.serif" + (bal < 0 ? ".red" : ""), { style: { fontSize: "16px" } }, F.signedMoney(bal))),
+      front ? h("div.wbal.serif" + (bal < 0 ? ".red" : ""), F.signedMoney(bal)) : null,
+      meta ? h("div.wmeta", meta) : null);
+    el.style.setProperty("--wc", "var(" + accountColor(a) + ")");
+    return el;
+  };
+  back.forEach((a, i) => {
+    const el = make(a, false);
+    Object.assign(el.style, { top: i * PEEK + "px", zIndex: String(i + 1), transform: "scale(" + Math.min(.98, .9 + i * .03) + ")", transformOrigin: "top center" });
+    el.addEventListener("click", () => pick(a));
+    box.append(el);
+  });
+  const front = make(acct, true);
+  Object.assign(front.style, { top: back.length * PEEK + "px", zIndex: "20" });
+  front.addEventListener("click", () => { if (acct && current) askBalance(acct); else if (!acct) toast("Tap Bank or Cash above to set its balance"); });
+  // swipe the front card left / right for the next / previous one
+  let sx = null;
+  front.addEventListener("touchstart", e => { sx = e.touches[0].clientX; }, { passive: true });
+  front.addEventListener("touchend", e => {
+    if (sx == null) return;
+    const dx = e.changedTouches[0].clientX - sx; sx = null;
+    if (Math.abs(dx) < 50) return;
+    const i = list.indexOf(acct);
+    pick(list[(i + (dx < 0 ? 1 : -1) + list.length) % list.length]);
+  }, { passive: true });
+  box.append(front);
+  const dots = h("div.wdots", list.map(a => {
+    const d = h("i" + (a === acct ? ".on" : ""), { onclick: () => pick(a), title: a || "All accounts" });
+    if (a === acct) d.style.background = "var(" + accountColor(a) + ")";
+    return d;
+  }), h("button", { onclick: addAccount, "aria-label": "Add an account" }, "+ Account"));
+  return [box, dots];
 }
 
 // "Set balance" / "Count cash": type what's really there, the difference becomes a correction (not income or spending).
