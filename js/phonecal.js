@@ -130,15 +130,15 @@ function pasteSheet(note) {
 export function setupSheet() {
   const step = (n, text) => h("div.row", h("span.badge", { style: { position: "static", flex: "none" } }, String(n)), h("div.grow.small", { style: { whiteSpace: "normal" } }, text));
   const s = sheet("Show your iPhone calendar", h("div",
-    h("div.small.muted", { style: { marginBottom: "10px" } }, "Apple doesn't let web apps read the calendar. A small shortcut does it for Homebase - set it up once in the Shortcuts app (Kurzbefehle)."),
+    h("div.small.muted", { style: { marginBottom: "10px" } }, "Apple doesn't let web apps read the calendar. A small shortcut does it for Homebase - set it up once in the Shortcuts app."),
     h("div.list",
-      step(1, "Kurzbefehle → + (new shortcut) → name it “Homebase Kalender”."),
-      step(2, "Add “Kalenderereignisse suchen” (Find Calendar Events): Filter “Startdatum” “ist in den nächsten” 60 Tage. Sort by Startdatum, no limit."),
-      step(3, "Add “Wiederholen mit jedem” (Repeat with Each) with the events."),
-      step(4, "Inside it add “Text” and type exactly: HB| then the event's Startdatum | Enddatum | Ganztägig | Kalender | Ort | Titel (Start Date, End Date, Is All Day, Calendar, Location, Title) - each separated by |. Tap Startdatum and Enddatum → Datumsformat “ISO 8601”, Zeit einschließen on."),
-      step(5, "After the loop (below “Wiederholen beenden”): “Text kombinieren” with “Neue Zeile”, then “In Zwischenablage kopieren”."),
-      step(6, "Run it, open Homebase → Plan → Calendar → Update. Done - run it again whenever your calendar changed."),
-      step(7, "Automatic: Kurzbefehle → Automation → + → Tageszeit 07:00, daily → “Sofort ausführen” → run “Homebase Kalender”. Then just tap Update in Homebase.")),
+      step(1, "Shortcuts → + (new shortcut) → name it “Homebase Kalender”."),
+      step(2, "Add “Find Calendar Events”: Add Filter → “Start Date” “is in the next” 60 days. Sort by Start Date, no limit."),
+      step(3, "Search “repeat” and add “Repeat with Each” (uses the events)."),
+      step(4, "Inside the loop add “Text” and type exactly: HB| then Repeat Item → Start Date | End Date | Is All Day | Calendar | Location | Title - each separated by |. Tap Start Date and End Date → Date Format “ISO 8601”, Include Time on."),
+      step(5, "Below “End Repeat”: “Combine Text” (Repeat Results, New Lines), then “Copy to Clipboard”."),
+      step(6, "Run it, open Homebase → Calendar → Update. Run it again whenever your calendar changed."),
+      step(7, "Automatic: Shortcuts → Automation → + → Time of Day 07:00, Daily → Run Immediately → “Homebase Kalender”. Then just tap Update in Homebase.")),
     h("div.small.muted", { style: { marginTop: "10px" } }, "Example line: HB|2026-11-20T18:30:00+01:00|2026-11-20T20:00:00+01:00|Nein|Privat|Kino|Movie night")),
     { actions: [btn("Close", { onclick: () => s.close() }), btn("Update now", { kind: "primary", icon: "phone", onclick: () => { s.close(); update(); } })] });
 }

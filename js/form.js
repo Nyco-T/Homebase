@@ -208,7 +208,7 @@ export function checklist(rec, key, changed) {
         e.preventDefault();
         items.push({ text: add.value.trim(), done: false });
         changed(); draw();
-        box.querySelector("input:last-of-type")?.focus();
+        box.lastElementChild.querySelector("input")?.focus();   // stay in "Add an item…" for the next one
       }
     });
     box.append(h("div.check", { style: { paddingLeft: "36px" } }, add));

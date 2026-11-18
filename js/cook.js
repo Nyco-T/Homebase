@@ -97,3 +97,35 @@ export function costLabel(c, short = false) {
   const main = "≈ " + F.money(c.perServing ?? c.total) + (c.perServing != null ? (short ? "/serving" : " per serving") : (short ? "" : " in total"));
   return main + (c.priced < c.of ? " (" + c.priced + "/" + c.of + " priced)" : "");
 }
+
+// ---------------- Onto the shopping list ----------------
+// The one way ingredients get onto the list (meal plan, recipes, "What can I cook?", the automation):
+// by the thing itself ("200 g Feta" -> "Feta", 200 g as the amount), without what's always at home,
+// without what's already on the list, each thing once.
+
+export function onList(item) {
+  const i = (item || "").toLowerCase().trim();
+  return db.all("shopping").some(s => !s.done && ((s.item || "").toLowerCase().trim() === i || (i.length > 3 && (s.item || "").toLowerCase().includes(i))));
+}
+
+export function toBuy(lines) {
+  const seen = new Set(), out = [];
+  for (const raw of lines) {
+    const line = (raw || "").trim();
+    if (!line || isStaple(line)) continue;
+    const item = coreName(line);
+    const key = item.toLowerCase();
+    if (seen.has(key) || onList(item)) continue;
+    seen.add(key);
+    const qty = line.replace(item, "").replace(/[(),]/g, " ").replace(/\s+/g, " ").trim();
+    out.push({ item, ...(qty ? { qty } : {}) });
+  }
+  return out;
+}
+
+// Puts what's missing on the list; returns how many were added.
+export function addToList(lines, note) {
+  const items = toBuy(lines);
+  for (const x of items) db.add("shopping", { ...x, done: false, ...(note ? { notes: note } : {}) });
+  return items.length;
+}

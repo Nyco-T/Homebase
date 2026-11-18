@@ -5,6 +5,7 @@ import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, switchEl, confirm, dialog, chips } from "../ui.js";
 import * as lock from "../lock.js";
 import { staplesText } from "../rules.js";
+import { searchText } from "../kinds.js";
 import * as push from "../push.js";
 import { editRecord, newRecord } from "../form.js";
 import * as auto from "../auto.js";
@@ -51,7 +52,7 @@ function notes(root) {
   const draw = () => {
     box.innerHTML = "";
     const q = noteSearch.toLowerCase();
-    const all = db.all("notes").filter(n => !q || JSON.stringify(n).toLowerCase().includes(q))
+    const all = db.all("notes").filter(n => !q || searchText(n).includes(q))
       .sort((a, b) => (b.pinned === true) - (a.pinned === true) || (b.updated || b.created || "").localeCompare(a.updated || a.created || ""));
     if (!all.length) { box.append(empty(db.all("notes").length ? "No note matches." : "Write down anything. Automatic reports (money, weekly review) land here too.")); return; }
     box.append(h("div.list", all.map(n => h("div.row", { onclick: () => editRecord("notes", n) },

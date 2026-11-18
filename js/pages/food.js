@@ -3,12 +3,11 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, seg, toast, empty, section, sheet, dialog } from "../ui.js";
-import { d, book, names } from "../kinds.js";
+import { d, book, names, searchText } from "../kinds.js";
 import { quickAdd } from "../quick.js";
 import { editRecord, newRecord, calcField } from "../form.js";
-import { isStaple } from "../rules.js";
 import { go } from "../app.js";
-import { match, recentlyBought, recipeCost, costLabel, coreName, priceOf, setPrice, pricedIngredients } from "../cook.js";
+import { match, recentlyBought, recipeCost, costLabel, coreName, priceOf, setPrice, pricedIngredients, addToList } from "../cook.js";
 import { parseRecipe } from "../recipeparse.js";
 import * as shopmode from "../shopmode.js";
 import * as auto from "../auto.js";
@@ -140,12 +139,7 @@ function ingredientsToList(from, to) {
     const day = d(m, "date");
     if (!day || day < from || day > to || !m.recipe) continue;
     const r = db.byId("recipes", m.recipe);
-    for (const i of r?.ingredients || []) {
-      const text = (i.text || "").trim();
-      if (!text || isStaple(text) || db.all("shopping").some(s => !s.done && (s.item || "").toLowerCase() === text.toLowerCase())) continue;
-      db.add("shopping", { item: text, done: false, notes: r.name });
-      n++;
-    }
+    if (r) n += addToList((r.ingredients || []).map(i => i.text), r.name);
   }
   toast(n ? F.plural(n, "ingredient", "ingredients") + " added to the shopping list" : "Everything is on the list already");
 }
@@ -173,7 +167,7 @@ function mealSheet(m) {
   const recipe = m.recipe && db.byId("recipes", m.recipe);
   const s = sheet(m.title, h("div.muted", F.dayDate(d(m, "date")) + " · " + (m.slot || "")), {
     actions: [
-      recipe ? btn("Open recipe", { kind: "soft", icon: "pot", onclick: () => { s.close(); editRecord("recipes", recipe); } }) : null,
+      recipe ? btn("Open recipe", { kind: "soft", icon: "pot", onclick: () => { s.close(); openRecipe(recipe); } }) : null,
       btn("Edit", { onclick: () => { s.close(); editRecord("meals", m); } }),
       btn("Remove", { kind: "danger", icon: "trash", onclick: () => {
         const i = db.remove("meals", m);
@@ -209,7 +203,7 @@ function cookCard() {
         h("div.grow", h("div.title", r.name), h("div.meta", { style: { whiteSpace: "normal" } }, (m.missing.length ? m.have + " of " + m.total + " · missing: " + m.missing.join(", ") : "you have everything" + (r.minutes ? " · " + r.minutes + " min" : "")) + (costLabel(recipeCost(r), true) ? " · " + costLabel(recipeCost(r), true) : ""))),
         h("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } },
           btn("Plan", { kind: "soft", small: true, onclick: () => { db.add("meals", { title: r.name, date: F.todayIso(), slot: new Date().getHours() < 11 ? "Lunch" : "Dinner", recipe: r.id }); toast(r.name + " planned for today"); } }),
-          m.missing.length ? btn("+ List", { kind: "ghost", small: true, onclick: () => { for (const x of m.missing) db.add("shopping", { item: x, done: false, notes: r.name }); toast(F.plural(m.missing.length, "item", "items") + " on the shopping list"); } }) : null)));
+          m.missing.length ? btn("+ List", { kind: "ghost", small: true, onclick: () => { const n = addToList(m.missing, r.name); toast(n ? F.plural(n, "item", "items") + " on the shopping list" : "Everything is on the list already"); } }) : null)));
     }
   };
   input.addEventListener("input", () => { cookText = input.value; draw(); });
@@ -230,7 +224,7 @@ function recipes(root) {
   const drawList = () => {
     listBox.innerHTML = "";
     const q = recipeSearch.toLowerCase();
-    const all = db.all("recipes").filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
+    const all = db.all("recipes").filter(r => !q || searchText(r).includes(q))
       .sort((a, b) => (b.favorite === true) - (a.favorite === true) || (a.name || "").localeCompare(b.name || ""));
     if (!all.length) { listBox.append(empty(db.all("recipes").length ? "No recipe matches." : "Save the recipes you cook - one tap puts the ingredients on the shopping list.")); return; }
     listBox.append(h("div.list", all.map(r => h("div.row", { onclick: () => openRecipe(r) },
@@ -322,14 +316,8 @@ function pricesSheet(r, done) {
 function openRecipe(r) {
   editRecord("recipes", r, { top: costRow(r), actions: [
     { label: "Ingredients → list", icon: "cart", run: rec => {
-      let n = 0;
-      for (const i of rec.ingredients || []) {
-        const text = (i.text || "").trim();
-        if (!text || isStaple(text)) continue;
-        db.add("shopping", { item: text, done: false, notes: rec.name });
-        n++;
-      }
-      toast(F.plural(n, "ingredient", "ingredients") + " added to the shopping list");
+      const n = addToList((rec.ingredients || []).map(i => i.text), rec.name);
+      toast(n ? F.plural(n, "ingredient", "ingredients") + " added to the shopping list" : "Everything is on the list already");
     } },
     { label: "Plan it", icon: "calendar", run: async rec => {
       const day = h("input.field", { type: "date", value: F.todayIso() });

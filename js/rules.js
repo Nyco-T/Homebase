@@ -5,7 +5,7 @@ import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { rule, reminder, find, NEVER, marks, setBookkeeping } from "./auto.js";
 import * as TO from "./timeoff.js";
-import { coreName } from "./cook.js";
+import { toBuy, onList } from "./cook.js";
 import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion, isNeutral, balanceOn } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -204,11 +204,10 @@ export function register() {
         if (!day || day < t || day > end || !meal.recipe) continue;
         const recipe = db.byId("recipes", meal.recipe);
         if (!recipe) continue;
-        // compared and added by the thing itself ("200 g Feta" -> "Feta", 200 g as the amount), so "Feta" on the list counts
-        const missing = [...new Set((recipe.ingredients || []).map(i => (i.text || "").trim()).filter(x => x && !onList(coreName(x)) && !isStaple(x)))];
+        const missing = toBuy((recipe.ingredients || []).map(i => i.text));   // by the thing itself - "Feta" on the list counts
         if (!missing.length) continue;
-        out.push(find("meal-ing:" + meal.id, F.plural(missing.length, "ingredient", "ingredients") + " for " + recipe.name + " on the list", F.dayDate(day) + ": " + missing.map(coreName).join(", "), "Add to list",
-          tx => { for (const m of missing) { const item = coreName(m), qty = m.replace(item, "").replace(/[(),]/g, " ").replace(/\s+/g, " ").trim(); tx.add("shopping", { item, ...(qty ? { qty } : {}), done: false, notes: recipe.name + " · " + F.dayDate(day) }); } }));
+        out.push(find("meal-ing:" + meal.id, F.plural(missing.length, "ingredient", "ingredients") + " for " + recipe.name + " on the list", F.dayDate(day) + ": " + missing.map(x => x.item).join(", "), "Add to list",
+          tx => { for (const x of missing) tx.add("shopping", { ...x, done: false, notes: recipe.name + " · " + F.dayDate(day) }); }));
       }
       return out;
     });
@@ -245,11 +244,6 @@ export function isStaple(text) {
   const t = (text || "").toLowerCase();
   const staples = staplesText().split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
   return staples.some(s => t === s || t.includes(" " + s) || t.startsWith(s + " ") || t.startsWith(s + ","));
-}
-
-function onList(item) {
-  const i = (item || "").toLowerCase().trim();
-  return db.all("shopping").some(s => !s.done && ((s.item || "").toLowerCase().trim() === i || (i.length > 3 && (s.item || "").toLowerCase().includes(i))));
 }
 
 function weekNumber(date) {

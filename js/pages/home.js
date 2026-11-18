@@ -186,10 +186,12 @@ export function undoTask(x) {
     if (e) db.remove("transactions", e);
     delete x.refundBooked;
   }
-  // a repeating task already made its next copy - take that back too
-  const list = db.all("tasks");
-  const copy = list.findLast?.(r => r !== x && r.title === x.title && !r.done && r.created >= x.updated?.slice(0, 19));
-  if (copy && x.repeat && x.repeat !== "Never") list.splice(list.indexOf(copy), 1);
+  // a repeating task already made its next copy - take exactly that one back too
+  if (x.nextCopy) {
+    const copy = db.byId("tasks", x.nextCopy);
+    if (copy && !isOn(copy, "done")) { const list = db.all("tasks"); list.splice(list.indexOf(copy), 1); }
+    delete x.nextCopy;
+  }
   db.touch(x);
   db.save("tasks");
 }

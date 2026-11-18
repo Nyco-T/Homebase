@@ -59,6 +59,14 @@ export const KINDS = {
 export const dueText = r => { const x = F.parseIso(r?.due); return x ? F.relative(x) + (r.time ? " " + r.time : "") : ""; };
 // sorts by day, then time (no time = end of the day)
 export const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "99").localeCompare(b.time || "99");
+// The words of a record you can search for - its texts, not its field names, ids or timestamps.
+const NOT_SEARCHED = new Set(["id", "created", "updated", "auto", "recipe", "repeat", "transfer", "repeatMonth", "phoneCalendar"]);
+export function searchText(rec) {
+  const out = [];
+  const walk = v => { if (v == null) return; if (typeof v === "string" || typeof v === "number") out.push(String(v)); else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === "object") Object.values(v).forEach(walk); };
+  for (const [k, v] of Object.entries(rec || {})) if (!NOT_SEARCHED.has(k) && typeof v !== "boolean") walk(v);
+  return out.join(" ").toLowerCase();
+}
 export const titleOf = (kind, r) => (r && r[KINDS[kind].titleKey]) || "Untitled " + KINDS[kind].one.toLowerCase();
 export const d = (r, key) => F.parseIso(r && r[key]);
 export const num = (r, key) => typeof r?.[key] === "number" ? r[key] : (F.parseNumber(r?.[key]) ?? 0);
@@ -110,6 +118,7 @@ export function finishTask(r) {
     again.due = F.iso(next);
     for (const s of again.steps || []) s.done = false;
     db.add("tasks", again);
+    r.nextCopy = again.id;   // so Undo removes exactly this copy
   }
   db.save("tasks");
 }
