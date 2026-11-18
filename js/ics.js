@@ -7,7 +7,7 @@ import * as F from "./fmt.js";
 import * as TO from "./timeoff.js";
 import { isOn, d } from "./kinds.js";
 
-const pad = n => String(n).padStart(2, "0");
+const pad = F.pad;
 const ymd = day => day.getFullYear() + pad(day.getMonth() + 1) + pad(day.getDate());
 const stampUtc = () => { const n = new Date(); return n.getUTCFullYear() + pad(n.getUTCMonth() + 1) + pad(n.getUTCDate()) + "T" + pad(n.getUTCHours()) + pad(n.getUTCMinutes()) + pad(n.getUTCSeconds()) + "Z"; };
 const esc = s => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");

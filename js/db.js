@@ -100,19 +100,37 @@ export function save(name) {
   timer = setTimeout(flush, 120);
 }
 
+// A failed write (phone storage full …) is shown, not just logged - the app sets what to do.
+let onSaveError = () => {};
+export const whenSaveFails = fn => { onSaveError = fn; };
+
 export async function flush() {
   if (!pending.size || !db) return;
   const names = [...pending];
   pending.clear();
-  const tx = db.transaction("lists", "readwrite");
+  let tx;
+  try { tx = db.transaction("lists", "readwrite"); }
+  catch (e) { names.forEach(n => pending.add(n)); onSaveError(e); return; }
   for (const n of names) tx.objectStore("lists").put({ name: n, items: all(n) });
-  await new Promise(ok => { tx.oncomplete = ok; tx.onerror = () => { console.error(tx.error); ok(); }; });
+  await new Promise(ok => {
+    tx.oncomplete = ok;
+    const failed = () => { console.error(tx.error); names.forEach(n => pending.add(n)); onSaveError(tx.error); ok(); };   // kept for the next try
+    tx.onerror = failed; tx.onabort = failed;
+  });
+}
+
+// Leaving the app: write every list now - changes still waiting in a short timer (a form, shopping mode) included,
+// since iOS may close the app in the background without another chance.
+export function flushAll() {
+  for (const n of LISTS) pending.add(n);
+  clearTimeout(timer);
+  return flush();
 }
 
 let version = 0;
 export const dataVersion = () => version;
 export function fire(name) {
-  version++;
+  if (name !== "automation") version++;   // (cached lists like the reminders only follow real changes)
   for (const fn of listeners) fn(name);
 }
 export const listen = fn => listeners.add(fn);
@@ -132,10 +150,14 @@ export async function setSetting(key, value) {
 
 // --- import / export (same format as the desktop app's "Export for iPhone") ---
 
+// The lock (backup code fingerprint, Face ID key) belongs to this phone - it never goes into a backup file.
+const DEVICE_ONLY = k => k.startsWith("lock.");
+
 export function exportData() {
   const lists = {};
   for (const n of LISTS) lists[n] = all(n);
-  return { format: "homebase-export", version: 1, from: "Homebase Mobile", schema: SCHEMA, exported: stamp(), settings: settings(), lists };
+  const kept = Object.fromEntries(Object.entries(settings()).filter(([k]) => !DEVICE_ONLY(k)));
+  return { format: "homebase-export", version: 1, from: "Homebase Mobile", schema: SCHEMA, exported: stamp(), settings: kept, lists };
 }
 
 // Replaces every list that's in the file. Returns how many records came in.
@@ -149,10 +171,17 @@ export async function importData(data) {
     pending.add(name);
   }
   if (data.settings) {
+    // a phone backup brings back all its settings (accounts, Time off, notifications, switches …);
+    // the desktop app's export only its currency and automation levels. This phone's lock always stays as it is.
+    const fromPhone = data.from === "Homebase Mobile";
     const keep = {};
-    for (const [k, v] of Object.entries(data.settings)) if (k === "currency" || k.startsWith("auto.")) keep[k] = typeof v === "string" && /^\d+$/.test(v) ? +v : v;
+    for (const [k, v] of Object.entries(data.settings)) {
+      if (DEVICE_ONLY(k)) continue;
+      if (fromPhone || k === "currency" || k.startsWith("auto.")) keep[k] = typeof v === "string" && /^\d+$/.test(v) && !fromPhone ? +v : v;
+    }
     meta.settings = { ...settings(), ...keep };
     await putMeta("settings", meta.settings);
+    fire("settings");   // theme and the rest apply right away
   }
   await flush();
   fire("import");

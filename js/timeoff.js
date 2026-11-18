@@ -82,10 +82,14 @@ export function balances(list = db.all("timeoff")) {
   }
   for (const { day, weight } of days) {
     const y = day.getFullYear();
-    // the oldest pool still valid on that day (last year's days until 31 March), else this year's
-    const pool = (out[y - 1] && out[y - 1].left > 0 && day <= out[y - 1].expires) ? out[y - 1] : out[y];
-    pool.left -= weight;
-    if (day <= now) pool.used += weight; else pool.planned += weight;
+    // the oldest days first: last year's (valid until 31 March) as far as they reach, the rest from this year's
+    const old = out[y - 1] && out[y - 1].left > 0 && day <= out[y - 1].expires ? out[y - 1] : null;
+    const fromOld = old ? Math.min(weight, old.left) : 0;
+    for (const [pool, w] of [[old, fromOld], [out[y], weight - fromOld]]) {
+      if (!pool || !w) continue;
+      pool.left -= w;
+      if (day <= now) pool.used += w; else pool.planned += w;
+    }
   }
   return out;
 }

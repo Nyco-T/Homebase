@@ -299,7 +299,8 @@ export function forecast() {
     if (a < 0 && a > -150 && !x.repeat && !fixedCats.has((x.category || "").toLowerCase()) && !notEveryday(x)) everyday -= a;
   }
   const key = F.monthKey(t);
-  for (const r of db.all("repeats")) if (!isOn(r, "paused") && (r.lastAdded || "") < key) coming += num(r, "amount");
+  // (one you booked yourself this month, before its day, is already in "now" - not counted twice)
+  for (const r of db.all("repeats")) if (!isOn(r, "paused") && (r.lastAdded || "") < key && !bookedByHand(r, key)) coming += num(r, "amount");
   const rest = -(everyday / Math.max(1, t.getDate())) * F.daysBetween(t, end);
   // month end = what you have now (carried over) + what's still to come + usual everyday spending
   const now = db.all("transactions").filter(x => x.date && x.date <= F.iso(t)).reduce((a, x) => a + num(x, "amount"), 0);

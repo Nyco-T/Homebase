@@ -60,7 +60,7 @@ export const plainAmount = v => (Math.round(v * 100) / 100).toFixed(2).replace("
 
 // --- dates ---
 
-const pad = n => String(n).padStart(2, "0");
+export const pad = n => String(n).padStart(2, "0");
 export const iso = d => d ? d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) : "";
 export function parseIso(s) {
   if (!s || typeof s !== "string") return null;

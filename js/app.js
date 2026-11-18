@@ -19,7 +19,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.12.1";
+export const VERSION = "1.12.2";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "check"], ["calendar", "Calendar", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, calendar: calendarPage, money, food, more };
@@ -130,11 +130,13 @@ function badgeCounts() {
 }
 
 // Redraw after data changes - but not under your fingers while you type in a field on the page.
+const USER_DATA = new Set(["events", "tasks", "notes", "transactions", "repeats", "shopping", "meals", "recipes", "chores", "rules", "timeoff", "import"]);
 let redrawTimer = null;
 function changed(what) {
   // the automation's own signals don't start it again (that was a loop: run -> "automation" -> run … every 1.5 s)
-  // (settings too: the automation and the notifications save settings themselves - that must not start them again)
-  if (!["automarks", "autolog", "dismissed", "automation", "settings"].includes(what)) scheduleAuto();
+  // only a change to your own data starts the automation - never its own signals, its logs or settings
+  // (that was twice a loop: run -> "automation" -> run, and push -> settings -> run)
+  if (USER_DATA.has(what)) scheduleAuto();
   clearTimeout(redrawTimer);
   redrawTimer = setTimeout(redraw, 60);
 }
@@ -221,7 +223,10 @@ async function start() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && !isOpen()) { runAuto(); redraw(); notifyToday(); }
   });
-  window.addEventListener("pagehide", () => db.flush());
+  window.addEventListener("pagehide", () => db.flushAll());
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") db.flushAll(); });
+  let warned = 0;
+  db.whenSaveFails(e => { if (Date.now() - warned > 60000) { warned = Date.now(); toast("Couldn't save - is your phone's storage full? (" + ((e && e.name) || "error") + ")"); } });
   render();
   runAuto();
   updateAppBadge();

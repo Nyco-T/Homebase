@@ -9,7 +9,7 @@ import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { h, sheet, btn, toast, tile } from "./ui.js";
 
-const pad = n => String(n).padStart(2, "0");
+const pad = F.pad;
 const MONTHS = { jan: 0, feb: 1, mär: 2, mar: 2, apr: 3, mai: 4, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, oct: 9, nov: 10, dez: 11, dec: 11 };
 
 export const isPhone = e => e?.source === "iphone";
