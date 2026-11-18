@@ -129,7 +129,7 @@ export function run() {
         if (level(r.area) >= r.autoAt) {
           const tx = new Tx();
           try { f.apply(tx); tx.commit(r, f.title); mark(f.key); done.push(f.title); }
-          catch (e) { lastError = r.id + ": " + e.message; console.error(e); }
+          catch (e) { tx.rollback(); lastError = r.id + ": " + e.message; console.error(e); }   // nothing half-done stays
         } else if (level(r.area) >= r.suggestAt) {
           waiting.push({ rule: r, finding: f });
         }

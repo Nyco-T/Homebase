@@ -48,7 +48,11 @@ async function putMeta(key, value) {
   meta[key] = value;
   const tx = db.transaction("meta", "readwrite");
   tx.objectStore("meta").put({ key, value });
-  await new Promise(ok => { tx.oncomplete = ok; tx.onerror = ok; });
+  await new Promise(ok => {
+    tx.oncomplete = ok;
+    const failed = () => { console.error(tx.error); onSaveError(tx.error); ok(); };
+    tx.onerror = failed; tx.onabort = failed;
+  });
 }
 
 export const getMeta = key => meta[key];
@@ -179,6 +183,8 @@ export async function importData(data) {
       if (DEVICE_ONLY(k)) continue;
       if (fromPhone || k === "currency" || k.startsWith("auto.")) keep[k] = typeof v === "string" && /^\d+$/.test(v) && !fromPhone ? +v : v;
     }
+    // what this phone already scheduled on ntfy.sh stays known - an older backup would schedule it a second time
+    if (keep["ntfy.sent"]) keep["ntfy.sent"] = { ...keep["ntfy.sent"], ...(setting("ntfy.sent", {}) || {}) };
     meta.settings = { ...settings(), ...keep };
     await putMeta("settings", meta.settings);
     fire("settings");   // theme and the rest apply right away

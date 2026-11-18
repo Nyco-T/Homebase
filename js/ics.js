@@ -26,6 +26,14 @@ function fold(line) {
   return out.join("\r\n");
 }
 const RRULE = { Weekly: "FREQ=WEEKLY", Monthly: "FREQ=MONTHLY", Yearly: "FREQ=YEARLY" };
+// A plain monthly rule on the 31st skips the shorter months (and 29.02. comes every 4 years); Homebase shows those on
+// the month's last day - so the rule says "the last of the 28th…31st that the month has".
+function rrule(repeat, day) {
+  const dd = day.getDate();
+  if (repeat === "Monthly" && dd > 28) return "FREQ=MONTHLY;BYMONTHDAY=" + [28, 29, 30, 31].filter(x => x <= dd).join(",") + ";BYSETPOS=-1";
+  if (repeat === "Yearly" && day.getMonth() === 1 && dd === 29) return "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1";
+  return RRULE[repeat] || null;
+}
 
 // "18:30" or "18:30–20:00" -> { start: "1830", end: "2000" | null }
 function times(text) {
@@ -55,7 +63,8 @@ export function items(opts) {
       } else {
         L.push("DTSTART;VALUE=DATE:" + ymd(day), "DTEND;VALUE=DATE:" + ymd(F.addDays(d(e, "end") || day, 1)));
       }
-      if (RRULE[e.repeat]) L.push("RRULE:" + RRULE[e.repeat]);
+      const rule = rrule(e.repeat, day);
+      if (rule) L.push("RRULE:" + rule);
       if (e.place) L.push("LOCATION:" + esc(e.place));
       if (e.notes) L.push("DESCRIPTION:" + esc(e.notes));
       out.push({ key: "event:" + e.id, updated: e.updated || e.created || "", lines: L, label: e.title || "Event" });

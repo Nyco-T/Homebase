@@ -19,10 +19,10 @@ function lastWordDate(rest) {
 }
 
 // A time anywhere in the line: "18:30", "9 uhr", "18.30 uhr", "um 9", "at 18:30" -> "18:30" (and the line without it).
-// "18.30" or "1.12" alone stays a date - a dot only means a time with "uhr" or "um"/"at" in front.
+// "18.30" or "1.12" alone stays a date - a dot only means a time with "uhr" or "um"/"at" in front. "2h" is a duration, not a time.
 function takeTime(rest) {
   const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2}):(\d{2})(?=\s|$)/i)
-    || rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:\.(\d{2}))?\s*(?:uhr|h)(?=\s|$)/i)
+    || rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:\.(\d{2}))?\s*uhr(?=\s|$)/i)
     || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?:[.:](\d{2}))?(?=\s|$)/i);
   if (!tm || +tm[1] > 23 || (tm[2] && +tm[2] > 59)) return { rest, time: null };
   return { rest: rest.replace(tm[0], " ").replace(/\s+/g, " ").trim(), time: F.pad(+tm[1]) + ":" + (tm[2] || "00") };
