@@ -52,7 +52,10 @@ export function quickAdd(line) {
     if (tag) { list = tag[1]; rest = rest.replace(tag[0], "").trim(); }
     // a time anywhere: "9:00", "18.30", "9 uhr", "um 9", "at 18:30"
     let time = null;
-    const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:[:.](\d{2})|\s*uhr|\s*h\b)(?=\s|$)/i) || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?=\s|$)/i);
+    // "18.30" or "1.12" alone stays a date - a dot only means a time with "uhr" or "um"/"at" in front
+    const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2}):(\d{2})(?=\s|$)/i)
+      || rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:\.(\d{2}))?\s*(?:uhr|h)(?=\s|$)/i)
+      || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?:[.:](\d{2}))?(?=\s|$)/i);
     if (tm && +tm[1] < 24 && (!tm[2] || +tm[2] < 60)) { time = String(tm[1]).padStart(2, "0") + ":" + (tm[2] || "00"); rest = rest.replace(tm[0], " ").replace(/\s+/g, " ").trim(); }
     const { text, date } = lastWordDate(rest);
     const t = { title: text, priority: high ? "High" : "Normal", repeat: "Never", done: false };

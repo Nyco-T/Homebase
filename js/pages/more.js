@@ -295,7 +295,7 @@ function pushBlock() {
       h("div.meta", { style: { whiteSpace: "normal", marginTop: "5px" } }, "In the ntfy app: + → paste this name → Subscribe. Nobody can guess it.")));
     box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Remind me before"),
       h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [5, 15, 30, 60].map(m => chip(m === 60 ? "1 hour" : m + " min", c.before === m, () => set({ before: m })))),
-      h("div.meta", "tasks and appointments with a time")));
+      h("div.meta", { style: { whiteSpace: "normal" } }, "tasks and appointments with a time · a change applies to reminders scheduled from now on")));
     box.append(h("div.row", { style: { display: "block" } }, h("div.title", "Morning summary"),
       h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } }, [["", "off"], ["07:00", "07:00"], ["08:00", "08:00"], ["09:00", "09:00"]].map(([v, l]) => chip(l, c.morning === v, () => set({ morning: v })))),
       h("div.meta", { style: { whiteSpace: "normal" } }, "how many tasks, appointments, birthdays, chores and payments today")));

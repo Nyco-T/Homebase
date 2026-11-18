@@ -38,6 +38,7 @@ async function keepAwake() {
 }
 
 export function open() {
+  if (document.querySelector(".shopmode")) return;   // a double tap opens it once
   const box = h("div.shopmode");
   const list = h("div");
   const totalEl = h("div.serif", { style: { fontSize: "21px" } });

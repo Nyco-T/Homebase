@@ -12,7 +12,19 @@ const ymd = day => day.getFullYear() + pad(day.getMonth() + 1) + pad(day.getDate
 const stampUtc = () => { const n = new Date(); return n.getUTCFullYear() + pad(n.getUTCMonth() + 1) + pad(n.getUTCDate()) + "T" + pad(n.getUTCHours()) + pad(n.getUTCMinutes()) + pad(n.getUTCSeconds()) + "Z"; };
 const esc = s => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 // lines longer than 75 bytes are folded (calendar files want that)
-const fold = line => { const out = []; let s = line; while (s.length > 74) { out.push(s.slice(0, 74)); s = " " + s.slice(74); } out.push(s); return out.join("\r\n"); };
+// lines may be at most 75 bytes (not characters - an emoji or umlaut takes several); longer ones continue with a space
+const enc = new TextEncoder();
+function fold(line) {
+  const out = [];
+  let cur = "", bytes = 0;
+  for (const ch of line) {   // whole characters, never cut through one
+    const b = enc.encode(ch).length;
+    if (bytes + b > 75) { out.push(cur); cur = " "; bytes = 1; }
+    cur += ch; bytes += b;
+  }
+  out.push(cur);
+  return out.join("\r\n");
+}
 const RRULE = { Weekly: "FREQ=WEEKLY", Monthly: "FREQ=MONTHLY", Yearly: "FREQ=YEARLY" };
 
 // "18:30" or "18:30–20:00" -> { start: "1830", end: "2000" | null }
@@ -35,7 +47,10 @@ export function items(opts) {
       if (t) {
         L.push("DTSTART:" + ymd(day) + "T" + t.start + "00");
         let endH = t.end;
-        if (!endH) { const h = Math.min(23, +t.start.slice(0, 2) + 1); endH = pad(h) + t.start.slice(2); }
+        if (!endH) {   // one hour, but never past midnight (23:30 ends at 23:59, not at 23:30)
+          const m = Math.min(23 * 60 + 59, +t.start.slice(0, 2) * 60 + +t.start.slice(2) + 60);
+          endH = pad(Math.floor(m / 60)) + pad(m % 60);
+        }
         L.push("DTEND:" + ymd(d(e, "end") || day) + "T" + endH + "00");
       } else {
         L.push("DTSTART;VALUE=DATE:" + ymd(day), "DTEND;VALUE=DATE:" + ymd(F.addDays(d(e, "end") || day, 1)));

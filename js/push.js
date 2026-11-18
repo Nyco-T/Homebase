@@ -51,7 +51,7 @@ export function planned(now = new Date()) {
   for (const t of db.all("tasks")) {
     if (isOn(t, "done") || !t.due || !t.time) continue;
     const when = new Date(at(F.parseIso(t.due), t.time).getTime() - c.before * 60000);
-    add("task:" + t.id + ":" + t.due + "T" + t.time + ":" + c.before, when, "✅ " + (c.details ? t.title + " · " + t.time : "A task is due in " + lead(c.before)), "white_check_mark");
+    add("task:" + t.id + ":" + t.due + "T" + t.time, when, "✅ " + (c.details ? t.title + " · " + t.time : "A task is due in " + lead(c.before)), "white_check_mark");
   }
   for (const e of db.all("events")) {
     if (e.source === "iphone") continue;
@@ -63,7 +63,7 @@ export function planned(now = new Date()) {
     for (let i = 0; x && i < 4; i++) {
       if (days.some(dd => dd.getTime() === x.getTime())) {
         const when = new Date(at(x, hhmm).getTime() - c.before * 60000);
-        add("event:" + e.id + ":" + F.iso(x) + "T" + hhmm + ":" + c.before, when, "📅 " + (c.details ? (e.title || "Appointment") + " · " + hhmm : "An appointment starts in " + lead(c.before)), "calendar");
+        add("event:" + e.id + ":" + F.iso(x) + "T" + hhmm, when, "📅 " + (c.details ? (e.title || "Appointment") + " · " + hhmm : "An appointment starts in " + lead(c.before)), "calendar");
       }
       if (!e.repeat || e.repeat === "Never") break;
       x = e.repeat === "Weekly" ? F.addDays(x, 7) : null;   // monthly / yearly don't come twice in 3 days
@@ -159,7 +159,10 @@ export async function schedule() {
     for (const [k, t] of Object.entries(sent)) if (t < now - 3600 * 1000) { delete sent[k]; pruned++; }   // forget the past
     let n = 0;
     for (const item of planned()) {
-      if (sent[item.key] || n >= MAX_PER_RUN) continue;
+      // one reminder per task/appointment and time: changing "Remind me before" doesn't schedule a second one
+      // (scheduled messages can't be taken back) - the new lead time applies to what's scheduled from then on.
+      // Older keys still carry the lead time at the end - they count as sent too.
+      if (sent[item.key] || Object.keys(sent).some(k => k.startsWith(item.key + ":")) || n >= MAX_PER_RUN) continue;
       try { await publish(c.topic, item); sent[item.key] = item.when.getTime(); n++; }
       catch (e) { break; }   // offline or limited - next time
     }

@@ -219,7 +219,11 @@ export function sheet(title, content, { actions = [], onClose } = {}) {
     const dy = e.touches[0].clientY - startY;
     if (!dragging) {
       if (Math.abs(dy) < 6) return;
-      dragging = (y > 0) || (dy > 0 && box.scrollTop <= 0);
+      // a text box (or list) inside that can still scroll up gets the swipe, not the popup
+      let inner = e.target;
+      while (inner && inner !== box && !(inner.scrollTop > 0 && inner.scrollHeight > inner.clientHeight)) inner = inner.parentNode;
+      const innerCanScrollUp = inner && inner !== box;
+      dragging = (y > 0 && !innerCanScrollUp) || (dy > 0 && box.scrollTop <= 0 && !innerCanScrollUp);
       if (!dragging) { startY = null; return; }   // a normal scroll inside the full popup
     }
     e.preventDefault();

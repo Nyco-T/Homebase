@@ -94,8 +94,10 @@ export function parseRecipe(text) {
 
   let mode = null;
   const hasHeads = lines.some(l => isHead(l) || ING_INLINE.test(l) || STEP_INLINE.test(l));
+  // where the steps heading is (if there is one): before it, a sentence-like line is still an ingredient
+  const stepHeadAt = lines.findIndex(l => isStepHead(l) || STEP_INLINE.test(l));
   const addIngredients = text => { for (const x of text.split(/\s*[,;]\s*(?![^(]*\))/)) if (x.trim()) out.ingredients.push(x.trim().replace(/\s*[.;]$/, "")); };
-  for (const l of lines) {
+  for (const [i, l] of lines.entries()) {
     if (l === first) continue;
     const ingInline = l.match(ING_INLINE);
     if (ingInline && !isIngHead(l)) { addIngredients(ingInline[4]); mode = "ing"; continue; }
@@ -106,7 +108,7 @@ export function parseRecipe(text) {
     if (/^(\d+)\s*(portionen|personen|servings)\b/i.test(l) || /^(portionen|personen|servings|serves)\s*:?\s*\d*$/i.test(l) || /^\d+$/.test(l)) continue;
     if (isTimeLine(l) || isStepLabel(l)) continue;
     // after the ingredients, the first sentence starts the steps (also without a "Zubereitung" heading)
-    if (mode === "ing" && looksLikeStep(l)) mode = "step";
+    if (mode === "ing" && (stepHeadAt < 0 || i > stepHeadAt) && looksLikeStep(l)) mode = "step";
     if (hasHeads || mode) {
       if (mode === "ing") { if (!isSubHead(l)) out.ingredients.push(l.replace(/\s*[.;]$/, "")); }
       else if (mode === "step") out.steps.push(l);

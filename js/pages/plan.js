@@ -372,11 +372,9 @@ export function timeoffSheet(rec) {
     for (const ty of Object.keys(TO.TYPES)) types.append(h("button.chip" + (r.type === ty ? ".on" : ""), { type: "button", onclick: () => { r.type = ty; draw(); } }, TYPE_EMOJI[ty] + " " + ty));
     const wd = TO.workDays(r), n = TO.countOf(r);
     // what's left after this break: count it as if it were saved
-    const saved = db.all("timeoff");
-    const i = rec ? saved.indexOf(rec) : -1;
-    if (i >= 0) saved.splice(i, 1, r); else saved.push(r);
-    const bal = TO.balances(); const row = TO.freeInARow(r);
-    if (i >= 0) saved.splice(i, 1, rec); else saved.pop();
+    // count it as if it were saved - on a copy of the list, the saved breaks stay untouched
+    const whatIf = db.all("timeoff").filter(x => x !== rec).concat([r]);
+    const bal = TO.balances(whatIf), row = TO.freeInARow(r, whatIf);
     const y = F.parseIso(r.to || r.from).getFullYear();
     const lefts = Object.values(bal).filter(b => b.year === y || b.year === y - 1).filter(b => b.year === y || b.left !== TO.balances()[b.year]?.left).map(b => fmtDays(Math.max(0, b.left)) + " left for " + b.year);
     info.innerHTML = "";

@@ -84,6 +84,7 @@ function mini(label, value, meta, link, valueClass = "") {
 let grown = null;
 const growerAt = r => ({ left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
 function grow(card, link) {
+  if (document.querySelector(".grower")) return;   // already growing - a double tap counts once
   if (calm()) return go(link);
   const g = h("div.grower");
   Object.assign(g.style, growerAt(card.getBoundingClientRect()));

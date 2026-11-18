@@ -140,8 +140,7 @@ function entries(root) {
 
 // The entries of one day (transfers as one line "Bank -> Cash").
 function entryList(list) {
-  {
-    return h("div.list", list.map(x => {
+  return h("div.list", list.map(x => {
       const a = num(x, "amount");
       if (isTransfer(x)) {
         const pair = transferPair(x);
@@ -154,7 +153,6 @@ function entryList(list) {
         h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (!acct && accountOf(x) !== "Bank" ? " · " + accountIcon(accountOf(x)) + " " + accountOf(x) : "") + (x.repeat ? " · repeating" : ""))),
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
     }));
-  }
 }
 
 // A category's emoji in a soft circle of its colour.

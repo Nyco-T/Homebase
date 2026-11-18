@@ -69,10 +69,11 @@ export const workDays = r => daysOf(r).length;
 // ---------------- Days left per year ----------------
 
 // { year: { total, before, used, planned, left, expires } } - each vacation day takes the oldest days that are still valid.
-export function balances() {
+// (list: the breaks to count - the saved ones by default, or a "what if" list for the sheet's live preview)
+export function balances(list = db.all("timeoff")) {
   const per = perYear();
   const now = F.today();
-  const days = db.all("timeoff").flatMap(r => daysOf(r).filter(x => x.weight > 0)).sort((a, b) => a.day - b.day);
+  const days = list.flatMap(r => daysOf(r).filter(x => x.weight > 0)).sort((a, b) => a.day - b.day);
   const years = new Set([now.getFullYear(), now.getFullYear() + 1, ...days.map(x => x.day.getFullYear())]);
   const out = {};
   for (const y of [...years].sort()) {
@@ -112,13 +113,14 @@ export function bridgeDays(from, to) {
   }
   return out;
 }
-export const takenOn = day => db.all("timeoff").some(r => daysOf(r).some(x => x.day.getTime() === day.getTime()) || (F.parseIso(r.from) <= day && day <= (F.parseIso(r.to) || F.parseIso(r.from))));
+// a day inside any break (its from..to range already covers every work day of it)
+export const takenOn = (day, list = db.all("timeoff")) => list.some(r => { const a = F.parseIso(r.from); return a && a <= day && day <= (F.parseIso(r.to) || a); });
 
 // How many days in a row you're off around a break (weekends and holidays before and after included).
-export function freeInARow(r) {
+export function freeInARow(r, list = db.all("timeoff")) {
   let from = F.parseIso(r.from), to = F.parseIso(r.to) || from;
   if (!from) return 0;
-  const off = d => !isWorkDay(d) || takenOn(d);
+  const off = d => !isWorkDay(d) || takenOn(d, list);
   while (off(F.addDays(from, -1))) from = F.addDays(from, -1);
   while (off(F.addDays(to, 1))) to = F.addDays(to, 1);
   return F.daysBetween(from, to) + 1;
