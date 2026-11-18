@@ -10,6 +10,7 @@ import { isStaple } from "../rules.js";
 import { go } from "../app.js";
 import { match, recentlyBought, recipeCost, costLabel, coreName, priceOf, setPrice, pricedIngredients } from "../cook.js";
 import { parseRecipe } from "../recipeparse.js";
+import * as shopmode from "../shopmode.js";
 
 const TABS = ["shopping", "meals", "recipes"];
 const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -42,6 +43,8 @@ function shopping(root) {
 
   const all = db.all("shopping");
   const open = all.filter(s => !s.done);
+  // in the shop: the list full screen, by aisle, with prices and a running total
+  if (all.length) root.append(h("div", { style: { margin: "-2px 0 12px" } }, btn("Start shopping", { kind: "soft", icon: "cart", onclick: () => shopmode.open() })));
   const bought = all.filter(s => s.done);
   if (!all.length) root.append(empty("Your list is empty. Type what you need above - commas add several at once."));
 
