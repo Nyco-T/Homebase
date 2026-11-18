@@ -152,7 +152,8 @@ function todayCard() {
   const c = h("div.card.todaycard");
   const tasks = db.all("tasks").filter(x => !isOn(x, "done") && d(x, "due") && d(x, "due") <= t)
     .sort(byDue);
-  const events = db.all("events").filter(e => { const n = nextEvent(e); return n && n.getTime() === t.getTime(); });
+  // today's events - and one over several days that's still going on (started earlier, "Until" today or later)
+  const events = db.all("events").filter(e => { const n = nextEvent(e); return n && (n.getTime() === t.getTime() || (n < t && (!e.repeat || e.repeat === "Never") && d(e, "end") >= t)); });
   const chores = db.all("chores").filter(x => nextChore(x) <= t);
   for (const e of events) c.append(row(tile(e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", "--today"), e.title, [e.time, e.place].filter(Boolean).join(" · ") || "today", null, () => openItem({ kind: "events", id: e.id })));
   for (const x of tasks.slice(0, 6)) {

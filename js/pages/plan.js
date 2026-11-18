@@ -138,6 +138,13 @@ export function calendar(root) {
     for (const hd of TO.holidays(y)) if (hd.date >= start && hd.date <= end) add(hd.date, { date: hd.date, title: "🎉 " + hd.name, detail: "public holiday", kind: "holiday", id: null, icon: "sparkle", color: "--warn" });
   }
   for (const e of db.all("events")) {
+    // an event over several days ("Until"): every day after the first one too (the first comes with the others above)
+    const first = d(e, "date"), last = d(e, "end");
+    if ((!e.repeat || e.repeat === "Never") && first && last && last > first) {
+      for (let x = F.addDays(first, 1), i = 0; x <= last && i < 400; x = F.addDays(x, 1), i++) {
+        if (x >= start && x <= end) add(x, { date: x, title: e.title, detail: "until " + F.date(last), time: "", kind: "events", id: e.id, icon: e.source === "iphone" ? "phone" : "calendar", color: "--today" });
+      }
+    }
     if (!e.repeat || e.repeat === "Never") continue;
     const shownNext = nextEvent(e)?.getTime();
     for (const x of eventDaysBetween(e, start, end)) {
