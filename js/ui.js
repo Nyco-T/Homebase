@@ -129,6 +129,26 @@ let openCount = 0;
 export const isOpen = () => openCount > 0;
 
 // A sheet that slides up from the bottom. Returns {el, close}. onClose runs once when it's gone.
+// Popups stay put: dragging the dark background (or a popup with nothing to scroll) never moves the popup or the page
+// behind it - only real scrolling inside a popup (a long form, a text box) still works.
+function holdStill(dim, box) {
+  dim.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+  let startY = 0;
+  box.addEventListener("touchstart", e => { startY = e.touches[0].clientY; }, { passive: true });
+  box.addEventListener("touchmove", e => {
+    // the nearest thing that can scroll up/down under the finger
+    let el = e.target;
+    while (el && el !== box.parentNode) {
+      if (el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) break;
+      el = el.parentNode;
+    }
+    if (!el || el === box.parentNode) { e.preventDefault(); return; }   // nothing to scroll: hold still
+    const dy = e.touches[0].clientY - startY;
+    // at the top pulling down, or at the bottom pushing up: hold still instead of bouncing
+    if ((dy > 0 && el.scrollTop <= 0) || (dy < 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 1)) e.preventDefault();
+  }, { passive: false });
+}
+
 export function sheet(title, content, { actions = [], onClose } = {}) {
   const dim = h("div.dim");
   // only the top bar (grip + title) closes the sheet with a swipe down - scrolling the content never does
@@ -136,6 +156,7 @@ export function sheet(title, content, { actions = [], onClose } = {}) {
   const box = h("div.sheet", head, content,
     actions.length ? h("div.actions", actions) : null);
   layer().append(dim, box);
+  holdStill(dim, box);
   openCount++;
   requestAnimationFrame(() => { dim.classList.add("in"); box.classList.add("in"); });
   let closed = false;
@@ -172,6 +193,7 @@ export function dialog(title, body, buttons) {
     const box = h("div.dialog", h("h3.serif", title), typeof body === "string" ? h("div.muted", body) : body, row);
     dim.addEventListener("click", () => finish(null));
     layer().append(dim, box);
+    holdStill(dim, box);
     openCount++;
     requestAnimationFrame(() => { dim.classList.add("in"); box.classList.add("in"); });
     const first = box.querySelector("input, select, textarea");
