@@ -10,13 +10,14 @@ import * as auto from "./auto.js";
 import * as reminders from "./reminders.js";
 import { editRecord } from "./form.js";
 import * as phonecal from "./phonecal.js";
+import * as lock from "./lock.js";
 import * as home from "./pages/home.js";
 import * as plan from "./pages/plan.js";
 import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.6.0";
+export const VERSION = "1.7.0";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, money, food, more };
@@ -183,6 +184,7 @@ export function installUpdate() {
 
 async function start() {
   await db.open();
+  lock.watch();   // the Face ID lock screen comes first, before anything shows
   applyTheme();
   db.persist();
   registerRules();

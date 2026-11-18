@@ -2,7 +2,8 @@
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
-import { h, icon, tile, btn, seg, toast, empty, section, switchEl, confirm } from "../ui.js";
+import { h, icon, tile, btn, seg, toast, empty, section, switchEl, confirm, dialog, chips } from "../ui.js";
+import * as lock from "../lock.js";
 import { editRecord, newRecord } from "../form.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -149,6 +150,10 @@ function settings(root) {
       db.setSetting("notify", on);
     }) : null)));
 
+  // privacy: the Face ID lock
+  root.append(section("Privacy"));
+  root.append(privacyBlock());
+
   // backup
   const last = F.parseIso(db.setting("lastBackup", ""));
   root.append(section("Backup", last ? "last one " + F.relative(last) : "never"));
@@ -204,4 +209,61 @@ async function importFile(f) {
   } catch (e) {
     toast("Couldn't import: " + e.message);
   }
+}
+
+// ---------------- Privacy: Face ID lock ----------------
+
+function privacyBlock() {
+  const box = h("div.list");
+  const draw = async () => {
+    box.innerHTML = "";
+    const on = lock.isOn();
+    box.append(h("div.row", tile("lock", "--accent"),
+      h("div.grow", h("div.title", "Face ID lock"), h("div.meta", { style: { whiteSpace: "normal" } }, on ? (lock.hasFaceId() ? "on · Face ID and backup code" : "on · backup code only") : "asks for Face ID when Homebase opens")),
+      switchEl(on, async want => {
+        if (want) { if (await turnOn()) draw(); else draw(); }
+        else if (await confirm("Turn off the lock?", "Homebase opens without Face ID or code again.", "Turn off", true)) { await db.setSetting("lock.on", false); toast("Lock off"); draw(); }
+        else draw();
+      })));
+    if (!on) return;
+    if (!lock.hasFaceId()) {
+      const ok = await lock.faceIdAvailable();
+      box.append(h("div.row", h("div.grow", h("div.title", "Face ID"), h("div.meta", { style: { whiteSpace: "normal" } }, ok ? "Not set up yet - the iPhone asks to save a passkey for Homebase" : "Not available here - the backup code works")),
+        ok ? btn("Set up", { kind: "soft", small: true, onclick: async () => {
+          try { await lock.setUpFaceId(); toast("Face ID is set up 🔒"); draw(); }
+          catch (e) { toast("Face ID wasn't set up - try again"); }
+        } }) : null));
+    }
+    const afterRow = h("div.row", { style: { flexWrap: "wrap" } }, h("div.grow", { style: { flex: "1 0 100%" } }, h("div.title", "Lock again after")));
+    afterRow.append(chips([["0", "right away"], ["60", "1 minute"], ["300", "5 minutes"]], String(lock.after()), k => { db.setSetting("lock.after", +k); draw(); }));
+    box.append(afterRow);
+    box.append(h("div.row", h("div.grow", h("div.title", "Backup code"), h("div.meta", "in case Face ID doesn't work")),
+      btn("Change", { kind: "ghost", small: true, onclick: async () => { if (await askCode("New backup code")) toast("Backup code changed"); } })));
+    box.append(h("div.row", h("div.grow", h("div.title", "Hide in the app switcher"), h("div.meta", { style: { whiteSpace: "normal" } }, "shows the lock screen instead of your money")),
+      switchEl(lock.hideInSwitcher(), v => db.setSetting("lock.hide", v))));
+    box.append(h("div.row", h("div.grow.small.muted", { style: { whiteSpace: "normal" } }, "Face ID stays on your iPhone - Homebase never sees your face. If you can't unlock, the backup code always works. This hides your data from others holding your phone; it doesn't encrypt it.")));
+  };
+  draw();
+  return box;
+}
+
+// A backup code, typed twice (4 to 8 digits).
+async function askCode(title) {
+  const a = h("input.field", { type: "password", inputmode: "numeric", autocomplete: "new-password", placeholder: "4 to 8 digits" });
+  const b = h("input.field", { type: "password", inputmode: "numeric", autocomplete: "new-password", placeholder: "Once more" });
+  const ok = await dialog(title, h("div", h("div.small.muted", "You'll need it if Face ID ever doesn't work. Don't forget it."),
+    h("label", h("span.label.caps", "Code"), a), h("label", h("span.label.caps", "Repeat"), b)), [{ label: "Cancel", value: false }, { label: "Save", value: true, main: true }]);
+  if (!ok) return false;
+  if (!/^\d{4,8}$/.test(a.value)) { toast("The code needs 4 to 8 digits"); return false; }
+  if (a.value !== b.value) { toast("The two codes don't match"); return false; }
+  await lock.setCode(a.value);
+  return true;
+}
+
+// Turning the lock on: backup code first (so you can never be locked out), then Face ID with one more tap.
+async function turnOn() {
+  if (!(await askCode("Set a backup code"))) return false;
+  await db.setSetting("lock.on", true);
+  toast(await lock.faceIdAvailable() ? "Lock on - now tap “Set up” for Face ID" : "Lock on with your backup code");
+  return true;
 }
