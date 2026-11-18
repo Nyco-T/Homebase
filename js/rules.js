@@ -148,8 +148,9 @@ export function register() {
     "7 days before a birthday in your calendar (an event of the kind Birthday): a task “Gift for …”, due 2 days before it.", 2, 3, () => {
       const out = [];
       for (const e of db.all("events")) {
-        const lower = (e.title || "").toLowerCase();
-        const birthday = e.category === "Birthday" || lower.includes("birthday") || lower.includes("geburtstag");
+        // a birthday: the kind Birthday, or a title that is one ("Anna's birthday", "Geburtstag Max") - not
+        // "Buy birthday cake" or "Anna's birthday party"
+        const birthday = e.category === "Birthday" || /^(birthday|geburtstag)\b|(birthday|geburtstag)$/i.test((e.title || "").trim());
         const next = nextEvent(e);
         if (!birthday || !next || next < F.today() || next > F.addDays(F.today(), 7)) continue;
         const due = F.addDays(next, -2) < F.today() ? F.today() : F.addDays(next, -2);
