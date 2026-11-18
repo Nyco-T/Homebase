@@ -13,14 +13,15 @@ import * as phonecal from "./phonecal.js";
 import * as lock from "./lock.js";
 import * as home from "./pages/home.js";
 import * as plan from "./pages/plan.js";
+import * as calendarPage from "./pages/calendar.js";
 import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.7.0";
+export const VERSION = "1.8.0";
 
-const TABS = [["home", "Home", "home"], ["plan", "Plan", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
-const PAGES = { home, plan, money, food, more };
+const TABS = [["home", "Home", "home"], ["plan", "Plan", "check"], ["calendar", "Calendar", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
+const PAGES = { home, plan, calendar: calendarPage, money, food, more };
 export const state = { updateReady: null };
 
 export function go(hash) {
@@ -45,7 +46,7 @@ export function openItem(item) {
   const rec = item.id && db.byId(item.kind, item.id);
   if (rec && phonecal.isPhone(rec)) phonecal.show(rec);
   else if (rec) editRecord(item.kind, rec);
-  else go({ events: "plan/calendar", tasks: "plan/tasks", chores: "plan/chores", repeats: "money/repeats", meals: "food/meals" }[item.kind] || "home");
+  else go({ events: "calendar", tasks: "plan/tasks", chores: "plan/chores", repeats: "money/repeats", meals: "food/meals" }[item.kind] || "home");
 }
 
 let scrollMemory = {};
@@ -96,9 +97,10 @@ function drawTabs(active) {
 }
 
 function badgeCounts() {
-  const c = { plan: 0, food: 0, more: auto.suggestions().length };
+  const c = { plan: 0, calendar: 0, food: 0, more: auto.suggestions().length };
   for (const x of reminders.active()) {
-    if (["tasks", "events", "chores"].includes(x.kind)) c.plan++;
+    if (["tasks", "chores"].includes(x.kind)) c.plan++;
+    if (x.kind === "events") c.calendar++;
     if (x.kind === "backup") c.more++;
   }
   c.food = db.all("shopping").filter(s => !s.done).length;

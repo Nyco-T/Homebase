@@ -416,3 +416,8 @@ body::before { display: none; }
 .lockscreen.out { opacity: 0; }
 .lockscreen.shake { animation: lockShake .35s; }
 @keyframes lockShake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+/* calendar day list: the time in front */
+.daytime { min-width: 46px; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+.daytime.muted { font-size: 12px; font-weight: 500; }
+#tabs button { font-size: 10px; }

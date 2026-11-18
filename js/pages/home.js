@@ -3,7 +3,7 @@
 import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, sheet, toast, empty, confetti } from "../ui.js";
-import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isNeutral, balanceOn, accountIcon } from "../kinds.js";
+import { d, num, isOn, nextEvent, nextChore, finishTask, choreDone, isNeutral, balanceOn, accountIcon, dueText, byDue } from "../kinds.js";
 import { quickAdd, QUICK_HINT } from "../quick.js";
 import * as auto from "../auto.js";
 import * as reminders from "../reminders.js";
@@ -78,14 +78,14 @@ function todayCard() {
   const t = F.today();
   const c = card("Today", "check", "--today", "plan/tasks");
   const tasks = db.all("tasks").filter(x => !isOn(x, "done") && d(x, "due") && d(x, "due") <= t)
-    .sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+    .sort(byDue);
   const events = db.all("events").filter(e => { const n = nextEvent(e); return n && n.getTime() === t.getTime(); });
   const chores = db.all("chores").filter(x => nextChore(x) <= t);
   for (const e of events) c.append(row(tile(e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", "--today"), e.title, [e.time, e.place].filter(Boolean).join(" · ") || "today", null, () => openItem({ kind: "events", id: e.id })));
   for (const x of tasks.slice(0, 6)) {
     const due = d(x, "due");
     c.append(row(tickBox(false, () => { finishTask(x); cheerIfClear("Done: " + x.title, () => undoTask(x)); }), x.title, x.list || "",
-      h("span.small" + (due < t ? ".red" : ".muted"), F.relative(due)), () => openItem({ kind: "tasks", id: x.id })));
+      h("span.small" + (due < t ? ".red" : ".muted"), dueText(x)), () => openItem({ kind: "tasks", id: x.id })));
   }
   for (const x of chores) c.append(row(tile("sparkle", "--home"), x.name, (x.area || "") + " · due " + F.relative(nextChore(x)),
     btn("Done", { kind: "soft", small: true, onclick: e => { e.stopPropagation(); choreDone(x); cheerIfClear(x.name + " done"); } }), () => openItem({ kind: "chores", id: x.id })));
@@ -123,7 +123,7 @@ function comingUpCard() {
   const t = F.today();
   // money (salary, rent …) isn't listed ahead here - it shows in Money on its day and stays there
   const items = reminders.between(F.addDays(t, 1), F.addDays(t, 14)).filter(x => !["backup", "transactions", "repeats"].includes(x.kind));
-  const c = card("Coming up", "calendar", "--today", "plan/calendar");
+  const c = card("Coming up", "calendar", "--today", "calendar");
   if (!items.length) { c.append(h("div.small.muted", "Nothing in the next two weeks. Add an event like “termin Zahnarzt 24.11.” or a birthday.")); return c; }
   for (const x of items.slice(0, 6)) c.append(row(tile(x.icon, x.color), x.title, x.detail, h("span.small.muted", F.relative(x.date)), () => openItem(x)));
   if (items.length > 6) c.append(h("div.small.muted", "+" + (items.length - 6) + " more in the calendar"));

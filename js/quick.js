@@ -50,12 +50,18 @@ export function quickAdd(line) {
     let list = null;
     const tag = rest.match(/#(\S+)/);
     if (tag) { list = tag[1]; rest = rest.replace(tag[0], "").trim(); }
+    // a time anywhere: "9:00", "18.30", "9 uhr", "um 9", "at 18:30"
+    let time = null;
+    const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:[:.](\d{2})|\s*uhr|\s*h\b)(?=\s|$)/i) || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?=\s|$)/i);
+    if (tm && +tm[1] < 24 && (!tm[2] || +tm[2] < 60)) { time = String(tm[1]).padStart(2, "0") + ":" + (tm[2] || "00"); rest = rest.replace(tm[0], " ").replace(/\s+/g, " ").trim(); }
     const { text, date } = lastWordDate(rest);
     const t = { title: text, priority: high ? "High" : "Normal", repeat: "Never", done: false };
     if (date) t.due = F.iso(date);
+    else if (time) t.due = F.todayIso();   // a time without a day means today
+    if (time) t.time = time;
     if (list) t.list = list;
     db.add("tasks", t);
-    return "Task: " + text + (date ? " · due " + F.relative(date) : "");
+    return "Task: " + text + (t.due ? " · due " + F.relative(F.parseIso(t.due)) + (time ? " " + time : "") : "");
   }
 
   n = startsWith(lower, ["buy", "kaufe", "kaufen", "einkaufen"]);

@@ -1,4 +1,4 @@
-// Plan: Tasks · Calendar · Chores · Time off.
+// Plan: Tasks · Chores · Time off. (The calendar has its own tab - its view lives here and pages/calendar.js shows it.)
 
 import * as db from "../db.js";
 import * as F from "../fmt.js";
@@ -6,7 +6,7 @@ import { h, icon, tile, tickBox, btn, seg, chips, toast, empty, section, sheet, 
 import * as TO from "../timeoff.js";
 import * as ICS from "../ics.js";
 import { switchEl } from "../ui.js";
-import { d, num, isOn, nextChore, nextEvent, finishTask, choreDone } from "../kinds.js";
+import { d, num, isOn, nextChore, nextEvent, finishTask, choreDone, dueText, byDue } from "../kinds.js";
 import { quickAdd } from "../quick.js";
 import { editRecord, newRecord } from "../form.js";
 import * as reminders from "../reminders.js";
@@ -14,18 +14,18 @@ import { go, openItem } from "../app.js";
 import { undoTask, todayClear, cheerIfClear } from "./home.js";
 import * as phonecal from "../phonecal.js";
 
-const TABS = ["tasks", "calendar", "chores", "timeoff"];
+const TABS = ["tasks", "chores", "timeoff"];
 let taskFilter = "open";
 let calMonth = null;
 let calDay = null;
 let calFor = "";   // the day the calendar was opened - a new day jumps back to today
 
 export function render(root, sub) {
+  if (sub === "calendar") { go("calendar"); return; }   // old links
   const tab = TABS.includes(sub) ? sub : "tasks";
   root.append(h("div.head", h("h1.serif", "Plan")));
-  root.append(seg(["Tasks", "Calendar", "Chores", "Time off"], TABS.indexOf(tab), i => go("plan/" + TABS[i])));
+  root.append(seg(["Tasks", "Chores", "Time off"], TABS.indexOf(tab), i => go("plan/" + TABS[i])));
   if (tab === "tasks") tasks(root);
-  else if (tab === "calendar") calendar(root);
   else if (tab === "timeoff") timeoff(root);
   else chores(root);
 }
@@ -75,7 +75,7 @@ function tasks(root) {
       ["Later", x => d(x, "due") && d(x, "due") > F.addDays(t, 7)], ["Someday", x => !x.due]];
     const prio = x => x.priority === "High" ? 0 : x.priority === "Low" ? 2 : 1;
     for (const [name, test] of groups) {
-      const items = shown.filter(test).sort((a, b) => (a.due || "").localeCompare(b.due || "") || prio(a) - prio(b));
+      const items = shown.filter(test).sort((a, b) => byDue(a, b) || prio(a) - prio(b));
       if (!items.length) continue;
       root.append(section(name + " · " + items.length));
       root.append(list(items.map(taskRow)));
@@ -101,22 +101,22 @@ function taskRow(x) {
       if (wasToday) cheerIfClear("Done: " + x.title, () => undoTask(x)); else toast("Done: " + x.title, "Undo", () => undoTask(x));
     }),
     h("div.grow", h("div.title" + (done ? ".done" : ""), (x.priority === "High" && !done ? "! " : "") + x.title), meta ? h("div.meta", meta) : null),
-    due && !done ? h("span.small" + (due < t ? ".red" : ".muted"), F.relative(due)) : null);
+    due && !done ? h("span.small" + (due < t ? ".red" : ".muted"), dueText(x)) : null);
 }
 
 // ---------------- Calendar ----------------
 
-function calendar(root) {
+export function calendar(root) {
   const t = F.today();
   if (calFor !== F.todayIso()) { calFor = F.todayIso(); calMonth = null; calDay = null; }
   calMonth = calMonth || new Date(t.getFullYear(), t.getMonth(), 1);
   calDay = calDay || t;
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
   root.append(h("div.head", { style: { margin: "0 0 10px" } },
-    h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { calMonth = new Date(y, m - 1, 1); go("plan/calendar"); } }),
+    h("button.btn.ghost.small", { html: icon("left", 20), onclick: () => { calMonth = new Date(y, m - 1, 1); go("calendar"); } }),
     h("div.serif", { style: { flex: "1", textAlign: "center", fontSize: "20px" } }, F.monthName(y, m)),
-    h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { calMonth = new Date(y, m + 1, 1); go("plan/calendar"); } }),
-    btn("Today", { small: true, onclick: () => { calMonth = new Date(t.getFullYear(), t.getMonth(), 1); calDay = t; go("plan/calendar"); } })));
+    h("button.btn.ghost.small", { html: icon("right", 20), onclick: () => { calMonth = new Date(y, m + 1, 1); go("calendar"); } }),
+    btn("Today", { small: true, onclick: () => { calMonth = new Date(t.getFullYear(), t.getMonth(), 1); calDay = t; go("calendar"); } })));
 
   const start = F.mondayOf(new Date(y, m, 1));
   const end = F.addDays(start, 41);
@@ -141,7 +141,7 @@ function calendar(root) {
     let x = d(e, "date");
     const shownNext = nextEvent(e)?.getTime();
     for (let i = 0; x <= end && i < 600; i++) {
-      if (x >= start && x.getTime() !== shownNext) (byDay[F.iso(x)] = byDay[F.iso(x)] || []).push({ date: x, title: e.title, detail: e.time || "", kind: "events", id: e.id, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
+      if (x >= start && x.getTime() !== shownNext) (byDay[F.iso(x)] = byDay[F.iso(x)] || []).push({ date: x, title: e.title, detail: e.time || "", time: (e.time || "").slice(0, 5), kind: "events", id: e.id, icon: e.category === "Birthday" ? "gift" : "calendar", color: "--today" });
       x = e.repeat === "Weekly" ? F.addDays(x, 7) : e.repeat === "Monthly" ? F.addMonths(x, 1) : F.addMonths(x, 12);
     }
   }
@@ -152,14 +152,20 @@ function calendar(root) {
     const key = F.iso(day);
     const dots = (byDay[key] || []).slice(0, 4).map(x => h("i", { style: { background: `var(${x.color})` } }));
     const cls = "div.day" + (day.getMonth() !== m ? ".other" : "") + (day.getTime() === t.getTime() ? ".today" : "") + (day.getTime() === calDay.getTime() ? ".sel" : "");
-    grid.append(h(cls, { onclick: () => { calDay = day; go("plan/calendar"); } }, h("span", day.getDate()), h("div.dots", dots)));
+    grid.append(h(cls, { onclick: () => { calDay = day; go("calendar"); } }, h("span", day.getDate()), h("div.dots", dots)));
   }
   root.append(grid);
 
-  const dayItems = byDay[F.iso(calDay)] || [];
+  // the day: everything by time (appointments and tasks mixed), all-day things at the end; tasks tick off right here
+  const dayItems = (byDay[F.iso(calDay)] || []).slice().sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
   root.append(section(F.weekday(calDay) + ", " + F.date(calDay), F.relative(calDay)));
   if (!dayItems.length) root.append(h("div.list", h("div.row", h("div.grow.muted", "Nothing on this day."))));
-  else root.append(list(dayItems.map(x => h("div.row", { onclick: () => openItem(x) }, tile(x.icon, x.color), h("div.grow", h("div.title", x.title), x.detail ? h("div.meta", x.detail) : null)))));
+  else root.append(list(dayItems.map(x => {
+    const task = x.kind === "tasks" ? db.byId("tasks", x.id) : null;
+    const lead = task ? tickBox(false, () => { finishTask(task); cheerIfClear("Done: " + task.title, () => undoTask(task)); }) : tile(x.icon, x.color);
+    return h("div.row", { onclick: () => openItem(x) }, h("span.daytime" + (x.time ? "" : ".muted"), x.time || "all day"), lead,
+      h("div.grow", h("div.title", x.title), x.detail ? h("div.meta", x.detail) : null));
+  })));
   root.append(h("div.btnrow", { style: { marginTop: "4px" } },
     btn("Event", { icon: "plus", onclick: () => newRecord("events", { date: F.iso(calDay) }) }),
     btn("Birthday", { icon: "gift", onclick: () => newRecord("events", { date: F.iso(calDay), repeat: "Yearly", category: "Birthday", title: "" }) }),

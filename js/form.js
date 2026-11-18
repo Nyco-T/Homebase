@@ -134,6 +134,16 @@ function fieldEditor(kind, rec, f, set, changed) {
       });
       return labeled(f.label + (f.type === "money" ? " (" + F.currency() + ")" : ""), f.type === "money" ? calcField(i) : i);
     }
+    case "time": {
+      // a time of day, with quick picks (morning / noon / evening / none)
+      const i = h("input.field", { type: "time", value: rec[f.key] || "" });
+      const quick = h("div.chips", { style: { flexWrap: "wrap", margin: "6px 0 0" } });
+      const draw = () => { quick.innerHTML = ""; for (const [v, label] of [["09:00", "morning 09:00"], ["12:00", "noon 12:00"], ["18:00", "evening 18:00"], ["", "no time"]]) {
+        quick.append(h("button.chip" + ((rec[f.key] || "") === v ? ".on" : ""), { type: "button", onclick: () => { i.value = v; set(f.key, v || null); draw(); } }, label)); } };
+      i.addEventListener("change", () => { set(f.key, i.value || null); draw(); });
+      draw();
+      return labeled(f.label, h("div", i, quick));
+    }
     case "date": {
       const i = h("input.field", { type: "date", value: rec[f.key] || "" });
       i.addEventListener("change", () => set(f.key, i.value || null));

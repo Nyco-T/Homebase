@@ -14,7 +14,7 @@ export const KINDS = {
     defaults: () => ({ date: F.todayIso(), repeat: "Never" }) },
 
   tasks: { title: "Tasks", one: "Task", icon: "check", color: "--today", titleKey: "title", fields: [
-    f("title", "Task", "text"), f("due", "Due", "date"), f("priority", "Priority", "choice", { choices: ["High", "Normal", "Low"] }),
+    f("title", "Task", "text"), f("due", "Due", "date"), f("time", "Time", "time"), f("priority", "Priority", "choice", { choices: ["High", "Normal", "Low"] }),
     f("list", "List", "open", { choices: ["Personal", "Errands", "Home", "Admin", "Money", "Health", "Shopping"] }),
     f("repeat", "Repeats", "choice", { choices: ["Never", "Daily", "Weekly", "Every 2 weeks", "Monthly", "Yearly"] }),
     f("steps", "Steps", "checklist"), f("notes", "Notes", "long")],
@@ -55,6 +55,10 @@ export const KINDS = {
     defaults: () => ({ every: 7, lastDone: F.todayIso() }) },
 };
 
+// "today 09:00" - a task's day and, if it has one, its time
+export const dueText = r => { const x = F.parseIso(r?.due); return x ? F.relative(x) + (r.time ? " " + r.time : "") : ""; };
+// sorts by day, then time (no time = end of the day)
+export const byDue = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (a.time || "99").localeCompare(b.time || "99");
 export const titleOf = (kind, r) => (r && r[KINDS[kind].titleKey]) || "Untitled " + KINDS[kind].one.toLowerCase();
 export const d = (r, key) => F.parseIso(r && r[key]);
 export const num = (r, key) => typeof r?.[key] === "number" ? r[key] : (F.parseNumber(r?.[key]) ?? 0);
@@ -305,11 +309,11 @@ export function dues() {
   const out = [];
   for (const e of db.all("events")) {
     const n = nextEvent(e);
-    if (n) out.push({ date: n, title: e.title || "Event", detail: [e.time, e.place, e.source === "iphone" ? "iPhone" : ""].filter(Boolean).join(" · "), kind: "events", id: e.id, lead: 1, icon: e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", color: "--today" });
+    if (n) out.push({ date: n, title: e.title || "Event", time: (e.time || "").slice(0, 5), detail: [e.time, e.place, e.source === "iphone" ? "iPhone" : ""].filter(Boolean).join(" · "), kind: "events", id: e.id, lead: 1, icon: e.category === "Birthday" ? "gift" : e.source === "iphone" ? "phone" : "calendar", color: "--today" });
   }
   for (const r of db.all("tasks")) {
     const due = d(r, "due");
-    if (due && !isOn(r, "done")) out.push({ date: due, title: r.title, detail: r.list || "", kind: "tasks", id: r.id, lead: 0, icon: "check", color: "--today" });
+    if (due && !isOn(r, "done")) out.push({ date: due, title: r.title, time: r.time || "", detail: ["task", r.list].filter(Boolean).join(" · "), kind: "tasks", id: r.id, lead: 0, icon: "check", color: "--today" });
   }
   for (const r of db.all("timeoff")) {
     const from = F.parseIso(r.from);

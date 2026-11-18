@@ -62,8 +62,11 @@ export function items(opts) {
       if (isOn(t, "done") || !t.due) continue;
       const day = d(t, "due");
       if (!day) continue;
+      const tm = times(t.time);   // a task with a time: 30 minutes at that time, else all day
+      const when = tm ? ["DTSTART:" + ymd(day) + "T" + tm.start + "00", "DTEND:" + ymd(day) + "T" + (() => { const m = +tm.start.slice(0, 2) * 60 + +tm.start.slice(2) + 30; return pad(Math.min(23, Math.floor(m / 60))) + pad(m >= 24 * 60 ? 59 : m % 60); })() + "00"]
+        : ["DTSTART;VALUE=DATE:" + ymd(day), "DTEND;VALUE=DATE:" + ymd(F.addDays(day, 1))];
       out.push({ key: "task:" + t.id, updated: t.updated || t.created || "", label: t.title || "Task",
-        lines: ["UID:hb-task-" + t.id + "@homebase", "SUMMARY:" + esc("✅ " + (t.title || "Task")), "DTSTART;VALUE=DATE:" + ymd(day), "DTEND;VALUE=DATE:" + ymd(F.addDays(day, 1)), "TRANSP:TRANSPARENT"] });
+        lines: ["UID:hb-task-" + t.id + "@homebase", "SUMMARY:" + esc("✅ " + (t.title || "Task")), ...when, "TRANSP:TRANSPARENT"] });
     }
   }
   if (opts.holidays && TO.isSetUp()) {
