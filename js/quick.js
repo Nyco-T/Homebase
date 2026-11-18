@@ -18,6 +18,16 @@ function lastWordDate(rest) {
   return d ? { text: words.slice(0, -1).join(" "), date: d } : { text: rest.trim(), date: null };
 }
 
+// A time anywhere in the line: "18:30", "9 uhr", "18.30 uhr", "um 9", "at 18:30" -> "18:30" (and the line without it).
+// "18.30" or "1.12" alone stays a date - a dot only means a time with "uhr" or "um"/"at" in front.
+function takeTime(rest) {
+  const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2}):(\d{2})(?=\s|$)/i)
+    || rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:\.(\d{2}))?\s*(?:uhr|h)(?=\s|$)/i)
+    || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?:[.:](\d{2}))?(?=\s|$)/i);
+  if (!tm || +tm[1] > 23 || (tm[2] && +tm[2] > 59)) return { rest, time: null };
+  return { rest: rest.replace(tm[0], " ").replace(/\s+/g, " ").trim(), time: F.pad(+tm[1]) + ":" + (tm[2] || "00") };
+}
+
 function startsWith(lower, words) {
   for (const w of words) if (lower.startsWith(w + " ")) return w.length + 1;
   return 0;
@@ -50,13 +60,8 @@ export function quickAdd(line) {
     let list = null;
     const tag = rest.match(/#(\S+)/);
     if (tag) { list = tag[1]; rest = rest.replace(tag[0], "").trim(); }
-    // a time anywhere: "9:00", "18.30", "9 uhr", "um 9", "at 18:30"
-    let time = null;
-    // "18.30" or "1.12" alone stays a date - a dot only means a time with "uhr" or "um"/"at" in front
-    const tm = rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2}):(\d{2})(?=\s|$)/i)
-      || rest.match(/(?:^|\s)(?:um\s+|at\s+)?(\d{1,2})(?:\.(\d{2}))?\s*(?:uhr|h)(?=\s|$)/i)
-      || rest.match(/(?:^|\s)(?:um|at)\s+(\d{1,2})(?:[.:](\d{2}))?(?=\s|$)/i);
-    if (tm && +tm[1] < 24 && (!tm[2] || +tm[2] < 60)) { time = String(tm[1]).padStart(2, "0") + ":" + (tm[2] || "00"); rest = rest.replace(tm[0], " ").replace(/\s+/g, " ").trim(); }
+    let time;
+    ({ rest, time } = takeTime(rest));
     const { text, date } = lastWordDate(rest);
     const t = { title: text, priority: high ? "High" : "Normal", repeat: "Never", done: false };
     if (date) t.due = F.iso(date);
@@ -101,10 +106,11 @@ export function quickAdd(line) {
 
   n = startsWith(lower, ["event", "termin"]);
   if (n) {
-    const { text, date } = lastWordDate(s.slice(n));
+    const { rest, time } = takeTime(s.slice(n));   // "termin Zahnarzt 24.11. 14:30" - the time doesn't hide the date
+    const { text, date } = lastWordDate(rest);
     const day = date || F.today();
-    db.add("events", { title: text, date: F.iso(day), repeat: "Never" });
-    return "Event: " + text + " · " + F.dayDate(day);
+    db.add("events", { title: text, date: F.iso(day), repeat: "Never", ...(time ? { time } : {}) });
+    return "Event: " + text + " · " + F.dayDate(day) + (time ? " " + time : "");
   }
 
   return null;

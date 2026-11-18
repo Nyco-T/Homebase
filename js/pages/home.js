@@ -70,7 +70,7 @@ function automationLine() {
   return h("div.autoline", { onclick: () => go("more/automation") },
     h("span", { html: icon("bolt", 17) }),
     h("div.grow", h("div.title", p.finding.title), pending.length > 1 ? h("div.meta", "+" + (pending.length - 1) + " more suggestions") : null),
-    btn(p.finding.yes, { kind: "soft", small: true, onclick: e => { e.stopPropagation(); auto.accept(p); toast("Done: " + p.finding.title); } }));
+    btn(p.finding.yes, { kind: "soft", small: true, onclick: e => { e.stopPropagation(); toast(auto.accept(p) ? "Done: " + p.finding.title : "Couldn't do that - the data changed meanwhile"); } }));
 }
 
 // a small card: what it is, one big value, one line - tap opens the page

@@ -4,6 +4,7 @@ import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, btn, seg, toast, empty, section, switchEl, confirm, dialog, chips } from "../ui.js";
 import * as lock from "../lock.js";
+import { staplesText } from "../rules.js";
 import * as push from "../push.js";
 import { editRecord, newRecord } from "../form.js";
 import * as auto from "../auto.js";
@@ -84,7 +85,7 @@ function automation(root) {
   else root.append(h("div.list", pending.map(p => h("div.row",
     tile(auto.AREAS[p.rule.area].icon, auto.AREAS[p.rule.area].color),
     h("div.grow", h("div.title", p.finding.title), h("div.meta", p.finding.detail)),
-    btn(p.finding.yes, { kind: "soft", small: true, onclick: () => { auto.accept(p); toast("Done"); } }),
+    btn(p.finding.yes, { kind: "soft", small: true, onclick: () => { toast(auto.accept(p) ? "Done" : "Couldn't do that - the data changed meanwhile"); } }),
     h("button.btn.ghost.small", { html: icon("x", 16), onclick: () => auto.decline(p) })))));
 
   // what it did
@@ -131,7 +132,7 @@ function settings(root) {
   // everyday settings
   const currency = h("input.field", { value: db.setting("currency", "€"), style: { width: "90px" } });
   currency.addEventListener("change", () => db.setSetting("currency", currency.value.trim() || "€"));
-  const staples = h("input.field", { value: db.setting("staples", "oil, öl, salt, salz, pepper, pfeffer, oregano, paprika, water, wasser") });
+  const staples = h("input.field", { value: staplesText() });
   staples.addEventListener("change", () => db.setSetting("staples", staples.value));
   root.append(h("div.card",
     h("label", h("span.label.caps", { style: { marginTop: "0" } }, "Currency sign"), currency),

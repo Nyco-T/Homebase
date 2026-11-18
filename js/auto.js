@@ -72,6 +72,8 @@ export class Tx {
     db.touch(rec);
     this.kinds.add(kind);
   }
+  // takes back what was done so far (when applying fails half-way)
+  rollback() { undo({ ops: this.ops, undone: false, _noLog: true }); this.ops = []; }
   commit(r, text) {
     for (const k of this.kinds) db.save(k);
     const log = db.all("autolog");
@@ -97,6 +99,7 @@ export function undo(entry) {
   }
   for (const k of kinds) db.save(k);
   entry.undone = true;
+  if (entry._noLog) return;
   db.touch(entry);
   db.save("autolog");
 }
@@ -112,6 +115,7 @@ export function run() {
   running = true;
   const done = [];
   const waiting = [];
+  try { prune(); } catch (e) { console.error(e); }
   const seen = marks();
   try {
     bookkeeping();
@@ -139,13 +143,30 @@ export function run() {
   return done;
 }
 
+// Returns false when it couldn't be done - then nothing is changed (what was done half-way is taken back).
 export function accept(p) {
   const tx = new Tx();
-  p.finding.apply(tx);
+  try { p.finding.apply(tx); }
+  catch (e) { tx.rollback(); lastError = p.rule.id + ": " + e.message; console.error(e); pending = pending.filter(x => x !== p); db.fire("automation"); return false; }
   tx.commit(p.rule, p.finding.title);
   mark(p.finding.key);
   pending = pending.filter(x => x !== p);
   db.fire("automation");
+  return true;
+}
+
+// The once-only memory would grow forever: marks for shopping items that are gone, and anything older than
+// two years, are dropped (once a day). The things they stood for can't come back by then.
+let prunedOn = "";
+function prune() {
+  const today = db.stamp().slice(0, 10);
+  if (prunedOn === today) return;
+  prunedOn = today;
+  const list = db.all("automarks");
+  const shopping = new Set(db.all("shopping").map(s => s.id));
+  const cutoff = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10);
+  const keep = list.filter(m => !(m.key.startsWith("buy:") && !shopping.has(m.key.slice(4))) && (m.date || today) >= cutoff);
+  if (keep.length !== list.length) { list.length = 0; list.push(...keep); db.save("automarks"); }
 }
 
 export function decline(p) {

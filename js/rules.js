@@ -5,6 +5,7 @@ import * as db from "./db.js";
 import * as F from "./fmt.js";
 import { rule, reminder, find, NEVER, marks, setBookkeeping } from "./auto.js";
 import * as TO from "./timeoff.js";
+import { coreName } from "./cook.js";
 import { d, num, isOn, nextEvent, guessCategory, bookedByHand, waitingRepeats, waitQuestion, isNeutral, balanceOn } from "./kinds.js";
 
 const norm = s => (s || "").toLowerCase().replace(/[0-9/.#*-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -203,10 +204,11 @@ export function register() {
         if (!day || day < t || day > end || !meal.recipe) continue;
         const recipe = db.byId("recipes", meal.recipe);
         if (!recipe) continue;
-        const missing = [...new Set((recipe.ingredients || []).map(i => (i.text || "").trim()).filter(x => x && !onList(x) && !isStaple(x)))];
+        // compared and added by the thing itself ("200 g Feta" -> "Feta", 200 g as the amount), so "Feta" on the list counts
+        const missing = [...new Set((recipe.ingredients || []).map(i => (i.text || "").trim()).filter(x => x && !onList(coreName(x)) && !isStaple(x)))];
         if (!missing.length) continue;
-        out.push(find("meal-ing:" + meal.id, F.plural(missing.length, "ingredient", "ingredients") + " for " + recipe.name + " on the list", F.dayDate(day) + ": " + missing.join(", "), "Add to list",
-          tx => { for (const m of missing) tx.add("shopping", { item: m, done: false, notes: recipe.name + " · " + F.dayDate(day) }); }));
+        out.push(find("meal-ing:" + meal.id, F.plural(missing.length, "ingredient", "ingredients") + " for " + recipe.name + " on the list", F.dayDate(day) + ": " + missing.map(coreName).join(", "), "Add to list",
+          tx => { for (const m of missing) { const item = coreName(m), qty = m.replace(item, "").replace(/[(),]/g, " ").replace(/\s+/g, " ").trim(); tx.add("shopping", { item, ...(qty ? { qty } : {}), done: false, notes: recipe.name + " · " + F.dayDate(day) }); } }));
       }
       return out;
     });
@@ -235,9 +237,13 @@ export function register() {
 }
 
 // Things you have at home anyway never go on the list (Settings → "Always at home").
+// Spices by their spice names only - "Paprika" and "pepper" alone are also vegetables (bell peppers).
+export const DEFAULT_STAPLES = "oil, öl, salt, salz, black pepper, pfeffer, oregano, paprikapulver, paprika edelsüß, water, wasser";
+const OLD_DEFAULT = "oil, öl, salt, salz, pepper, pfeffer, oregano, paprika, water, wasser";
+export const staplesText = () => { const v = db.setting("staples", DEFAULT_STAPLES); return v === OLD_DEFAULT ? DEFAULT_STAPLES : v; };
 export function isStaple(text) {
   const t = (text || "").toLowerCase();
-  const staples = (db.setting("staples", "oil, öl, salt, salz, pepper, pfeffer, oregano, paprika, water, wasser")).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  const staples = staplesText().split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
   return staples.some(s => t === s || t.includes(" " + s) || t.startsWith(s + " ") || t.startsWith(s + ","));
 }
 

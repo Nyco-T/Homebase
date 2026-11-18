@@ -11,6 +11,7 @@ import { go } from "../app.js";
 import { match, recentlyBought, recipeCost, costLabel, coreName, priceOf, setPrice, pricedIngredients } from "../cook.js";
 import { parseRecipe } from "../recipeparse.js";
 import * as shopmode from "../shopmode.js";
+import * as auto from "../auto.js";
 
 const TABS = ["shopping", "meals", "recipes"];
 const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"];
@@ -94,8 +95,14 @@ async function bookPurchase() {
   if (!ok) return;
   const v = F.parseAmount(total.value);
   if (v == null || v <= 0) { toast("Nothing booked - the total wasn't a number"); return; }
-  book(shop.value.trim() || "Shopping", -v, "Groceries", F.todayIso());
-  toast("Booked " + F.money(v) + " into Money");
+  auto.run();   // remember what was bought (and prices you typed) before the items leave the list
+  const e = book(shop.value.trim() || "Shopping", -v, "Groceries", F.todayIso());
+  // what's in the cart is paid now - it leaves the list (like Finish in shopping mode), so it isn't counted again later
+  const list = db.all("shopping");
+  const paid = list.filter(s => s.done);
+  for (const s of paid) list.splice(list.indexOf(s), 1);
+  db.save("shopping");
+  toast("Booked " + F.money(v) + " · cart cleared", "Undo", () => { db.remove("transactions", e); db.all("shopping").push(...paid); db.save("shopping"); });
 }
 
 // ---------------- Meal plan ----------------
