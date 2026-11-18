@@ -13,6 +13,7 @@ let month = null;
 let income = false;
 let catFilter = null;
 let acct = null;   // null = all accounts
+let showEarlier = false, earlierFor = "";   // the folded older days of the entry list
 
 export function render(root, sub) {
   const t = F.today();
@@ -85,11 +86,35 @@ function entries(root) {
   if (!shown.length) root.append(empty("No entries in " + F.monthName(y, m) + " yet. Tap + to add one."));
   const byDay = {};
   for (const x of shown) (byDay[x.date] = byDay[x.date] || []).push(x);
-  for (const [day, list] of Object.entries(byDay)) {
-    const dd = F.parseIso(day);
-    const total = list.filter(x => acct || !isTransfer(x)).reduce((a, x) => a + num(x, "amount"), 0);
-    root.append(section((dd.getTime() === t.getTime() ? "Today · " : "") + F.dayDate(dd), F.signedMoney(total)));
-    root.append(h("div.list", list.map(x => {
+  // the last week stays open (at least 3 days with entries); older days fold into "Show earlier days"
+  if (earlierFor !== y + "-" + m + ":" + acct) { earlierFor = y + "-" + m + ":" + acct; showEarlier = false; }
+  const days = Object.keys(byDay);
+  const weekAgo = F.iso(F.addDays(upTo, -6));
+  const openCount = catFilter ? days.length : Math.max(Math.min(3, days.length), days.filter(k => k >= weekAgo).length);
+  const dayTotal = list => list.filter(x => acct || !isTransfer(x)).reduce((a, x) => a + num(x, "amount"), 0);
+  const yesterday = F.addDays(t, -1).getTime();
+  const dayBlock = day => {
+    const dd = F.parseIso(day), list = byDay[day];
+    const label = dd.getTime() === t.getTime() ? "Today · " : dd.getTime() === yesterday ? "Yesterday · " : "";
+    return [section(label + F.dayDate(dd), F.signedMoney(dayTotal(list))), entryList(list)];
+  };
+  for (const day of days.slice(0, openCount)) root.append(...dayBlock(day));
+  const folded = days.slice(openCount);
+  if (folded.length) {
+    const sum = folded.reduce((a, k) => a + dayTotal(byDay[k]), 0);
+    const toggle = h("button.fold", { onclick: () => { showEarlier = !showEarlier; go("money"); } },
+      h("span", { html: icon(showEarlier ? "up" : "down", 18) + (showEarlier ? " Show fewer days" : " Show earlier days") }),
+      showEarlier ? null : h("span.small.muted", F.plural(folded.length, "day", "days") + " · " + F.signedMoney(sum)));
+    if (showEarlier) { for (const day of folded) root.append(...dayBlock(day)); }
+    root.append(toggle);
+  }
+  root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: () => entrySheet() }));
+}
+
+// The entries of one day (transfers as one line "Bank -> Cash").
+function entryList(list) {
+  {
+    return h("div.list", list.map(x => {
       const a = num(x, "amount");
       if (isTransfer(x)) {
         const pair = transferPair(x);
@@ -101,9 +126,8 @@ function entries(root) {
       return h("div.row", { onclick: () => openEntry(x) }, catTile(x.category),
         h("div.grow", h("div.title", x.description || "–"), h("div.meta", (x.category || "Other") + (!acct && accountOf(x) !== "Bank" ? " · " + accountIcon(accountOf(x)) + " " + accountOf(x) : "") + (x.repeat ? " · repeating" : ""))),
         h("span.right" + (a > 0 ? ".greenc" : ""), F.signedMoney(a)));
-    })));
+    }));
   }
-  root.append(h("button.fab", { "aria-label": "New entry", html: icon("plus", 26), onclick: () => entrySheet() }));
 }
 
 // A category's emoji in a soft circle of its colour.

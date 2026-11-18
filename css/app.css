@@ -421,3 +421,9 @@ body::before { display: none; }
 .daytime { min-width: 46px; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
 .daytime.muted { font-size: 12px; font-weight: 500; }
 #tabs button { font-size: 10px; }
+
+/* Money: "Show earlier days" */
+.fold { width: 100%; margin: 4px 0 12px; padding: 12px 14px; border-radius: 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--glass); border: 1px solid var(--glass-border); border-top-color: var(--glass-edge); color: var(--text); font-weight: 600; font-size: 14px; }
+.fold span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.fold svg { width: 18px; height: 18px; }

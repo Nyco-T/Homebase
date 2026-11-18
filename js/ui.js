@@ -23,7 +23,7 @@ const P = {
   more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   download: '<path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5M4 14v6h16v-6"/>',
   upload: '<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8M4 14v6h16v-6"/>',
-  down: '<path d="M6 9l6 6 6-6"/>', trend: '<path d="M3 6l6 6 4-3 8 9M15 18h6v-6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>', up: '<path d="M6 15l6-6 6 6"/>', trend: '<path d="M3 6l6 6 4-3 8 9M15 18h6v-6"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
   bank: '<path d="M3.5 9.5L12 4.5l8.5 5"/><path d="M5.5 10.5v7M10 10.5v7M14 10.5v7M18.5 10.5v7M3.5 20h17"/>',
   cash: '<rect x="2.5" y="6.5" width="19" height="11" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>',
