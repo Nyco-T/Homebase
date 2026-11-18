@@ -19,7 +19,7 @@ import * as money from "./pages/money.js";
 import * as food from "./pages/food.js";
 import * as more from "./pages/more.js";
 
-export const VERSION = "1.11.0";
+export const VERSION = "1.11.1";
 
 const TABS = [["home", "Home", "home"], ["plan", "Plan", "check"], ["calendar", "Calendar", "calendar"], ["money", "Money", "wallet"], ["food", "Food", "cart"], ["more", "More", "more"]];
 const PAGES = { home, plan, calendar: calendarPage, money, food, more };
@@ -112,7 +112,8 @@ function badgeCounts() {
 let redrawTimer = null;
 function changed(what) {
   // the automation's own signals don't start it again (that was a loop: run -> "automation" -> run … every 1.5 s)
-  if (!["automarks", "autolog", "dismissed", "automation"].includes(what)) scheduleAuto();
+  // (settings too: the automation and the notifications save settings themselves - that must not start them again)
+  if (!["automarks", "autolog", "dismissed", "automation", "settings"].includes(what)) scheduleAuto();
   clearTimeout(redrawTimer);
   redrawTimer = setTimeout(redraw, 60);
 }

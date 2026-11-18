@@ -73,7 +73,7 @@ function automation(root) {
     const lv = auto.level(id);
     levels.append(h("div", { style: { padding: "8px 0" } },
       h("div", { style: { display: "flex", gap: "10px", alignItems: "center" } }, tile(a.icon, a.color), h("div.grow", h("div.title", a.title), h("div.meta", lv + " · " + auto.LEVELS[lv] + " - " + auto.LEVEL_ABOUT[lv]))),
-      h("div.dial", auto.LEVELS.map((name, i) => h("button" + (i < lv ? ".lit" : i === lv ? ".at" : ""), { onclick: () => { auto.setLevel(id, i); toast(a.title + ": " + i + " · " + name); } }, String(i))))));
+      h("div.dial", auto.LEVELS.map((name, i) => h("button" + (i < lv ? ".lit" : i === lv ? ".at" : ""), { onclick: async () => { await auto.setLevel(id, i); auto.run(); toast(a.title + ": " + i + " · " + name); } }, String(i))))));
   }
   root.append(levels);
 
@@ -105,11 +105,11 @@ function automation(root) {
       const lv = auto.level(id);
       const stateText = !on ? "off" : lv >= r.autoAt ? "acting" : lv >= r.suggestAt ? "suggesting" : "needs level " + Math.min(r.suggestAt, r.autoAt);
       rows.push(h("div.row", h("div.grow", h("div.title", r.title + "  ", h("span.pill", stateText)), h("div.meta", { style: { whiteSpace: "normal" } }, r.about)),
-        switchEl(on, v => auto.enable(r.id, v))));
+        switchEl(on, async v => { await auto.enable(r.id, v); auto.run(); })));
     }
     for (const r of auto.allReminderRules().filter(x => x.area === id)) {
       rows.push(h("div.row", h("div.grow", h("div.title", r.title + "  ", h("span.pill", auto.level(id) >= 2 ? "reminding" : "needs level 2")), h("div.meta", { style: { whiteSpace: "normal" } }, r.about)),
-        switchEl(auto.enabled(r.id), v => auto.enable(r.id, v))));
+        switchEl(auto.enabled(r.id), async v => { await auto.enable(r.id, v); auto.run(); })));
     }
     root.append(h("div.caps", { style: { margin: "12px 2px 6px", color: `var(${a.color})` } }, a.title));
     root.append(h("div.list", rows));

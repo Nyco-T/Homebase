@@ -13,7 +13,8 @@ let month = null;
 let income = false;
 let catFilter = null;
 let acct = null;   // null = all accounts
-let showEarlier = false, earlierFor = "";   // the folded older days of the entry list
+let showEarlier = false, earlierFor = "";
+let lastFront;   // the card in front last time - it only slides in when that changes   // the folded older days of the entry list
 
 export function render(root, sub) {
   const t = F.today();
@@ -65,13 +66,20 @@ function entries(root) {
   }
   hero.append(dots);
   let sx = null, sy = null;
-  hero.addEventListener("touchstart", e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
-  hero.addEventListener("touchmove", e => { if (sx == null) return; const dx = e.touches[0].clientX - sx; if (Math.abs(dx) > Math.abs(e.touches[0].clientY - sy)) hero.style.transform = "translateX(" + dx / 3 + "px)"; }, { passive: true });
+  hero.addEventListener("touchstart", e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; sideways = null; }, { passive: true });
+  let sideways = null;   // decided once per touch: clearly sideways (follow the finger) or not (stay still while you scroll)
+  hero.addEventListener("touchmove", e => {
+    if (sx == null) return;
+    const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+    if (sideways === null && Math.abs(dx) + Math.abs(dy) > 12) sideways = Math.abs(dx) > Math.abs(dy) * 2;
+    if (sideways) hero.style.transform = "translateX(" + dx / 3 + "px)";
+  }, { passive: true });
   hero.addEventListener("touchend", e => {
     if (sx == null) return;
     const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-    sx = null; hero.style.transform = "";
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const wasSideways = sideways;
+    sx = null; sideways = null; hero.style.transform = "";
+    if (!wasSideways || Math.abs(dx) < 50) return;
     month = new Date(y, m + (dx < 0 ? 1 : -1), 1); catFilter = null; go("money");
   }, { passive: true });
   root.append(hero);
@@ -232,6 +240,8 @@ function walletStack(t, upTo, current) {
     box.append(el);
   });
   const front = make(acct, true);
+  if (lastFront === acct) front.classList.remove("front-in"); else front.classList.add("front-in");
+  lastFront = acct;
   Object.assign(front.style, { top: back.length * PEEK + "px", zIndex: "20" });
   front.addEventListener("click", () => { if (acct && current) askBalance(acct); else if (!acct) toast("Tap Bank or Cash above to set its balance"); });
   // swipe the front card left / right for the next / previous one

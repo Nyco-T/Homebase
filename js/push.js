@@ -155,15 +155,17 @@ export async function schedule() {
   try {
     const now = Date.now();
     const sent = { ...(db.setting("ntfy.sent", {}) || {}) };
-    for (const [k, t] of Object.entries(sent)) if (t < now - 3600 * 1000) delete sent[k];   // forget the past
+    let pruned = 0;
+    for (const [k, t] of Object.entries(sent)) if (t < now - 3600 * 1000) { delete sent[k]; pruned++; }   // forget the past
     let n = 0;
     for (const item of planned()) {
       if (sent[item.key] || n >= MAX_PER_RUN) continue;
       try { await publish(c.topic, item); sent[item.key] = item.when.getTime(); n++; }
       catch (e) { break; }   // offline or limited - next time
     }
-    await db.setSetting("ntfy.sent", sent);
-    await db.setSetting("ntfy.last", F.nowStamp());
+    // saved only when something changed - a save redraws the page (and that once caused a loop with the automation)
+    if (n || pruned) await db.setSetting("ntfy.sent", sent);
+    if (n) await db.setSetting("ntfy.last", F.nowStamp());
     return n;
   } finally { running = false; }
 }
