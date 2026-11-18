@@ -4,6 +4,8 @@ import * as db from "../db.js";
 import * as F from "../fmt.js";
 import { h, icon, tile, tickBox, btn, seg, chips, toast, empty, section, sheet, dialog } from "../ui.js";
 import * as TO from "../timeoff.js";
+import * as ICS from "../ics.js";
+import { switchEl } from "../ui.js";
 import { d, num, isOn, nextChore, nextEvent, finishTask, choreDone } from "../kinds.js";
 import { quickAdd } from "../quick.js";
 import { editRecord, newRecord } from "../form.js";
@@ -173,7 +175,50 @@ function calendar(root) {
     last ? h("div", { style: { display: "flex", gap: "4px" } },
       h("button.btn.ghost.small", { html: icon("gear", 18), onclick: phonecal.setupSheet, "aria-label": "How to set it up" }),
       btn("Update", { kind: "soft", small: true, onclick: phonecal.update }))
-      : btn("Set up", { kind: "soft", small: true, onclick: phonecal.setupSheet }))));
+      : btn("Set up", { kind: "soft", small: true, onclick: phonecal.setupSheet })),
+    h("div.row", tile("calendar", "--blue"),
+      h("div.grow", h("div.title", "Send to iPhone Calendar"), h("div.meta", { style: { whiteSpace: "normal" } },
+        db.setting("ics.last", "") ? "last sent " + F.relative(F.parseIso(db.setting("ics.last", ""))) : "Your appointments and time off in the iPhone's Calendar app")),
+      btn("Send", { kind: "soft", small: true, onclick: sendSheet }))));
+}
+
+// What to send (remembered), only new or everything - then the share sheet with the calendar file.
+function sendSheet() {
+  const opts = { events: true, timeoff: true, tasks: false, holidays: false, ...(db.setting("ics.opts", {}) || {}) };
+  let mode = db.setting("ics.last", "") ? "new" : "all";
+  const listBox = h("div.list");
+  const modeBox = h("div", { style: { display: "flex", gap: "6px", marginTop: "12px" } });
+  const sendBtn = btn("Send", { kind: "primary", icon: "calendar", onclick: async () => {
+    const all = ICS.items(opts), list = mode === "new" ? all.filter(ICS.isNew) : all;
+    if (!list.length) { toast(all.length ? "Nothing new to send - everything is in your iPhone calendar" : "Nothing to send yet"); return; }
+    const ok = await ICS.share(ICS.file(list));
+    if (!ok) return;
+    ICS.markSent(list);
+    s.close();
+    toast(F.plural(list.length, "item", "items") + " in the file - open it and tap “Add All”");
+  } });
+  const draw = () => {
+    db.setSetting("ics.opts", opts);
+    const all = ICS.items(opts), fresh = all.filter(ICS.isNew).length;
+    modeBox.innerHTML = "";
+    for (const [k, label] of [["new", "Only new · " + fresh], ["all", "Everything · " + all.length]]) {
+      modeBox.append(h("button.chip" + (mode === k ? ".on" : ""), { type: "button", style: { flex: "1" }, onclick: () => { mode = k; draw(); } }, label));
+    }
+    const n = mode === "new" ? fresh : all.length;
+    sendBtn.lastChild.textContent = n ? "Send " + n : "Send";
+  };
+  const toggle = (key, title, meta) => h("div.row", h("div.grow", h("div.title", title), h("div.meta", meta)), switchEl(opts[key], on => { opts[key] = on; draw(); }));
+  listBox.append(
+    toggle("events", "📅 Appointments and events", "incl. repeating ones and birthdays"),
+    toggle("timeoff", "🏖️ Time off", "your breaks, as all-day events"),
+    toggle("tasks", "✅ Tasks with a date", "as all-day entries"),
+    toggle("holidays", "🎉 Public holidays", "your iPhone usually has them already"));
+  draw();
+  const s = sheet("Send to iPhone Calendar", h("div",
+    h("div.small.muted", { style: { marginBottom: "10px", whiteSpace: "normal" } }, "Homebase makes a calendar file - your iPhone adds what's in it. Events from your iPhone calendar are never sent back."),
+    listBox, modeBox,
+    h("div.small.muted", { style: { marginTop: "10px", whiteSpace: "normal" } }, "Then: Save to Files → open the file → Add All. Sending a changed item again updates it in your iPhone calendar.")), {
+    actions: [btn("Cancel", { kind: "ghost", onclick: () => s.close() }), sendBtn] });
 }
 
 // ---------------- Chores ----------------
@@ -256,8 +301,10 @@ function yearCard(b, t) {
   const pct = v => Math.max(0, Math.min(100, v / Math.max(1, b.total) * 100)) + "%";
   // this year's days from October on, last year's while they're still valid - never next year's
   const warn = left > 0 && (b.year < t.getFullYear() || (b.year === t.getFullYear() && t.getMonth() >= 9));
-  return h("div.card",
-    h("div.cardhead", h("h2", tile("calendar", "--blue"), "Vacation " + b.year), h("span.small.muted", b.total + " days a year")),
+  // tap the card (or Edit) to correct the numbers: days per year, days left for this year
+  return h("div.card", { onclick: () => setupSheet(b.year), style: { cursor: "pointer" } },
+    h("div.cardhead", h("h2", tile("calendar", "--blue"), "Vacation " + b.year),
+      btn("Edit", { kind: "ghost", small: true, icon: "gear", onclick: e => { e.stopPropagation(); setupSheet(b.year); } })),
     h("div", { style: { display: "flex", alignItems: "baseline", gap: "8px" } },
       h("span.serif" + (left < 0 ? ".red" : ""), { style: { fontSize: "32px" } }, String(left).replace(".", ",")), h("span.muted", (left === 1 ? "day" : "days") + " left")),
     h("div", { style: { display: "flex", height: "8px", borderRadius: "4px", overflow: "hidden", background: "var(--track)", margin: "8px 0 7px" } },
@@ -265,7 +312,7 @@ function yearCard(b, t) {
     h("div.small.muted", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } },
       h("span", h("span", { style: { color: "var(--accent)" } }, "● "), fmtDays(taken) + " taken"),
       h("span", h("span", { style: { color: "var(--home)" } }, "● "), fmtDays(b.planned) + " planned"),
-      h("span", "○ " + fmtDays(Math.max(0, left)) + " left")),
+      h("span", "○ " + fmtDays(Math.max(0, left)) + " left"), h("span", "· " + b.total + " a year")),
     warn ? h("div.small.warnc", { style: { marginTop: "8px" } }, "⚠️ " + fmtDays(left) + " of " + b.year + " expire on " + F.date(b.expires) + " - plan them") : null);
 }
 
@@ -277,24 +324,24 @@ function setupCard() {
     btn("Set up", { kind: "primary", onclick: () => setupSheet() }));
 }
 
-async function setupSheet() {
-  const y = F.today().getFullYear();
+async function setupSheet(year) {
+  const y = year || F.today().getFullYear();
   const per = h("input.field", { inputmode: "numeric", value: TO.perYear() || "", placeholder: "30" });
   const st = h("select.field", Object.entries(TO.STATES).map(([k, v]) => h("option", { value: k, selected: k === TO.state() }, v)));
-  const leftNow = h("input.field", { inputmode: "decimal", value: TO.isSetUp() ? String(TO.balances()[y].left).replace(".", ",") : "", placeholder: "e.g. 9" });
+  const leftNow = h("input.field", { inputmode: "decimal", value: TO.isSetUp() ? String(TO.availableBefore(y)).replace(".", ",") : "", placeholder: "e.g. 9" });
   const body = h("div",
     h("label", h("span.label.caps", "Vacation days per year"), per),
     h("label", h("span.label.caps", "State (for public holidays)"), st),
-    h("label", h("span.label.caps", "Days left for " + y + " right now"), leftNow),
-    h("div.small.muted", { style: { marginTop: "8px", whiteSpace: "normal" } }, "Including what's already in Homebase. Days of a year can be used until 31 March of the next year."));
-  const ok = await dialog("Time off", body, [{ label: "Cancel", value: false }, { label: "Save", value: true, main: true }]);
+    h("label", h("span.label.caps", "Days left for " + y + ", before the breaks in Homebase"), leftNow),
+    h("div.small.muted", { style: { marginTop: "8px", whiteSpace: "normal" } }, "What you had left before the breaks you entered here - Homebase takes those off by itself (oldest days first; a year's days can be used until 31 March of the next year). To change a break, tap it in the list."));
+  const ok = await dialog(TO.isSetUp() ? "Vacation " + y : "Time off", body, [{ label: "Cancel", value: false }, { label: "Save", value: true, main: true }]);
   if (!ok) return;
   const n = parseInt(per.value, 10);
   if (!(n > 0 && n < 100)) { toast("Type your vacation days per year"); return; }
   await db.setSetting("vacation.perYear", n);
   await db.setSetting("vacation.state", st.value);
   const l = F.parseNumber(leftNow.value);
-  if (l != null) TO.setLeftNow(y, l);
+  if (l != null) await TO.setAvailableBefore(y, l);
   toast("Time off set up - " + n + " days a year, " + TO.STATES[st.value]);
   go("plan/timeoff");
 }

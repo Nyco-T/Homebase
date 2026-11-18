@@ -89,13 +89,12 @@ export function balances() {
   return out;
 }
 
-// "I have 9 days left this year" -> remembers 20 as used before Homebase (minus what's already entered for that year).
-export function setLeftNow(year, left) {
-  const per = perYear();
-  const b = balances()[year];
-  const enteredForYear = b ? (b.used + b.planned) : 0;
-  const before = Math.max(0, Math.round((per - left - enteredForYear) * 2) / 2);
-  db.setSetting("vacation.usedBefore", { ...usedBefore(), [year]: before });
+// "I had 9 days left for 2026 before the breaks in Homebase" -> 20 used before Homebase knew about them.
+// (Asked this way it's clear: the breaks you entered are taken off afterwards, oldest days first.)
+export const availableBefore = year => perYear() - Number(usedBefore()[year] || 0);
+export async function setAvailableBefore(year, days) {
+  const before = Math.max(0, Math.round((perYear() - days) * 2) / 2);
+  await db.setSetting("vacation.usedBefore", { ...usedBefore(), [year]: before });
 }
 
 // ---------------- Bridge days ----------------
